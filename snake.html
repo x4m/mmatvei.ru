@@ -14,6 +14,35 @@
         a: false,
         init: false,
       }
+      function getCursorPosition(canvas, event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            if (x * rect.height > y * rect.width)
+            {
+                //console.log("a");
+                if ((rect.width - x)* rect.height > y* rect.width)
+                {
+                    console.log("вверх");
+                }
+                else
+                {
+                    console.log("вправо");
+                }
+            }
+            else
+            {
+                //console.log("b");
+                if ((rect.width - x)* rect.height > y* rect.width)
+                {
+                    console.log("влево");
+                }
+                else
+                {
+                    console.log("вниз");
+                }
+            }
+        }
       function draw() {
         const canvas = document.getElementById("canvas");
         if (canvas.getContext) {
@@ -25,6 +54,10 @@
             state.w = (ctx.canvas.width - 30) / 22;
             state.h = (ctx.canvas.height - 30) / 22;
             state.init = true;
+
+            ctx.canvas.addEventListener('mousedown', function(e) {
+                getCursorPosition(ctx.canvas, e)
+            })
           }
 
           ctx.reset();
