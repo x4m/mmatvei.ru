@@ -19,6 +19,9 @@
         f:{x:15,y:15},
         i: 500
       }
+      state.f.x = Math.floor(Math.random() * state.w);
+      state.f.y = Math.floor(Math.random() * state.h);
+
       function getCursorPosition(canvas, event) {
             const rect = canvas.getBoundingClientRect();
             const x = event.clientX - rect.left;
