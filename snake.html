@@ -19,8 +19,6 @@
         f:{x:15,y:15},
         i: 500
       }
-      state.f.x = Math.floor(Math.random() * state.w);
-      state.f.y = Math.floor(Math.random() * state.h);
 
       function getCursorPosition(canvas, event) {
             const rect = canvas.getBoundingClientRect();
@@ -67,6 +65,8 @@
             ctx.canvas.height = window.innerHeight - 30;
             state.w = (ctx.canvas.width - 30) / 22;
             state.h = (ctx.canvas.height - 30) / 22;
+            state.f.x = Math.floor(Math.random() * state.w);
+            state.f.y = Math.floor(Math.random() * state.h);
             state.init = true;
 
             ctx.canvas.addEventListener('mousedown', function(e) {
