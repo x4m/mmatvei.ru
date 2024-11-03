@@ -23,7 +23,15 @@
       function fail()
       {
         alert("Конец игры");
-        location.reload();
+        state = {
+            a: false,
+            init: false,
+            dx: 1,
+            dy: 0,
+            s:[{x:9,y:10},{x:10,y:10}],
+            f:{x:15,y:15},
+            i: 500
+        }
       }
 
       function getCursorPosition(canvas, event) {
@@ -111,7 +119,7 @@
             {
                 state.f.x = Math.floor(Math.random() * state.w);
                 state.f.y = Math.floor(Math.random() * state.h);
-                state.i = state.i * 0.8;
+                state.i = state.i * 0.9;
             }
             else
             {
