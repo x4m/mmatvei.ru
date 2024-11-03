@@ -13,6 +13,9 @@
       var state = {
         a: false,
         init: false,
+        dx: 1,
+        dy: 0,
+        s:[{x:9,y:10},{x:10,y:10}]
       }
       function getCursorPosition(canvas, event) {
             const rect = canvas.getBoundingClientRect();
@@ -20,26 +23,32 @@
             const y = event.clientY - rect.top;
             if (x * rect.height > y * rect.width)
             {
-                //console.log("a");
                 if ((rect.width - x)* rect.height > y* rect.width)
                 {
                     console.log("вверх");
+                    state.dy = -1;
+                    state.dx = 0;
                 }
                 else
                 {
                     console.log("вправо");
+                    state.dy = 0;
+                    state.dx = 1;
                 }
             }
             else
             {
-                //console.log("b");
                 if ((rect.width - x)* rect.height > y* rect.width)
                 {
                     console.log("влево");
+                    state.dy = 0;
+                    state.dx = -1;
                 }
                 else
                 {
                     console.log("вниз");
+                    state.dy = 1;
+                    state.dx = 0;
                 }
             }
         }
@@ -64,28 +73,19 @@
           ctx.fillStyle = "rgb(0 0 200 / 10%)";
           ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-            // if (state.a)
-            // {
-            //     ctx.fillStyle = "rgb(200 0 0)";
-            //     ctx.fillRect(10, 10, 50, 50);
-
-            //     ctx.fillStyle = "rgb(0 200 0)";
-            //     ctx.fillRect(30, 30, 50, 50);
-            // }
-            // else
-            // {
-            //     ctx.fillStyle = "rgb(0 0 200)";
-            //     ctx.fillRect(10, 10, 50, 50);
-
-            //     ctx.fillStyle = "rgb(200 0 0 / 50%)";
-            //     ctx.fillRect(30, 30, 50, 50);
-            // }
-
             for (var i = 0; i < state.w; i++)
                 for (var o = 0; o < state.h; o++)
             {
                 ctx.fillStyle = "rgb(200 0 0 / 10%)";
                 ctx.fillRect(10+i*22, 10+o*22, 20, 20);
+            }
+            var last= state.s[state.s.length-1];
+            state.s.push({x:last.x + state.dx, y:last.y + state.dy});
+            state.s.shift();
+            for (const p of state.s)
+            {
+                ctx.fillStyle = "rgb(0 200 0 / 80%)";
+                ctx.fillRect(10+p.x*22, 10+p.y*22, 20, 20);
             }
             state.a = !state.a;
         }
