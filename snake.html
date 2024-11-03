@@ -15,7 +15,9 @@
         init: false,
         dx: 1,
         dy: 0,
-        s:[{x:9,y:10},{x:10,y:10}]
+        s:[{x:9,y:10},{x:10,y:10}],
+        f:{x:15,y:15},
+        i: 500
       }
       function getCursorPosition(canvas, event) {
             const rect = canvas.getBoundingClientRect();
@@ -79,20 +81,37 @@
                 ctx.fillStyle = "rgb(200 0 0 / 10%)";
                 ctx.fillRect(10+i*22, 10+o*22, 20, 20);
             }
-            var last= state.s[state.s.length-1];
+            var last = state.s[state.s.length-1];
             state.s.push({x:last.x + state.dx, y:last.y + state.dy});
-            state.s.shift();
+            last = state.s[state.s.length-1];
+            if (last.x == state.f.x && last.y == state.f.y)
+            {
+                state.f.x = Math.floor(Math.random() * state.w);
+                state.f.y = Math.floor(Math.random() * state.h);
+                state.i = state.i * 0.8;
+            }
+            else
+            {
+                state.s.shift();
+            }
             for (const p of state.s)
             {
                 ctx.fillStyle = "rgb(0 200 0 / 80%)";
                 ctx.fillRect(10+p.x*22, 10+p.y*22, 20, 20);
             }
+            ctx.fillStyle = "rgb(200 0 0 / 80%)";
+            ctx.fillRect(10+state.f.x*22, 10+state.f.y*22, 20, 20);
             state.a = !state.a;
         }
       }
       draw();
 
-      let timerId = setInterval(() => draw(), 500);
+      //setTimeout(() => draw(),, state.i);
+      var myFunction = function() {
+        draw();
+        setTimeout(myFunction, state.i);
+    }
+    setTimeout(myFunction, state.i);
     </script>
 </body>
 </html>
