@@ -22,6 +22,8 @@
           {
             ctx.canvas.width  = window.innerWidth - 20;
             ctx.canvas.height = window.innerHeight - 30;
+            state.w = (ctx.canvas.width - 20) / 22;
+            state.h = (ctx.canvas.height - 30) / 22;
             state.init = true;
           }
 
@@ -29,21 +31,28 @@
           ctx.fillStyle = "rgb(0 0 200 / 10%)";
           ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-            if (state.a)
+            // if (state.a)
+            // {
+            //     ctx.fillStyle = "rgb(200 0 0)";
+            //     ctx.fillRect(10, 10, 50, 50);
+
+            //     ctx.fillStyle = "rgb(0 200 0)";
+            //     ctx.fillRect(30, 30, 50, 50);
+            // }
+            // else
+            // {
+            //     ctx.fillStyle = "rgb(0 0 200)";
+            //     ctx.fillRect(10, 10, 50, 50);
+
+            //     ctx.fillStyle = "rgb(200 0 0 / 50%)";
+            //     ctx.fillRect(30, 30, 50, 50);
+            // }
+
+            for (var i = 0; i < state.w; i++)
+                for (var o = 0; o < state.h; o++)
             {
                 ctx.fillStyle = "rgb(200 0 0)";
-                ctx.fillRect(10, 10, 50, 50);
-
-                ctx.fillStyle = "rgb(0 200 0)";
-                ctx.fillRect(30, 30, 50, 50);
-            }
-            else
-            {
-                ctx.fillStyle = "rgb(0 0 200)";
-                ctx.fillRect(10, 10, 50, 50);
-
-                ctx.fillStyle = "rgb(200 0 0 / 50%)";
-                ctx.fillRect(30, 30, 50, 50);
+                ctx.fillRect(10+i*22, 10+o*22, 20, 20);
             }
             state.a = !state.a;
         }
