@@ -12,14 +12,22 @@
     <script>
       var state = {
         a: false,
+        init: false,
       }
       function draw() {
         const canvas = document.getElementById("canvas");
         if (canvas.getContext) {
           const ctx = canvas.getContext("2d");
+          if (!state.init)
+          {
+            ctx.canvas.width  = window.innerWidth - 20;
+            ctx.canvas.height = window.innerHeight - 30;
+            state.init = true;
+          }
+
           ctx.reset();
           ctx.fillStyle = "rgb(0 0 200 / 10%)";
-          ctx.fillRect(0, 0, 150, 150);
+          ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
             if (state.a)
             {
