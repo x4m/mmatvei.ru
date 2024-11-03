@@ -20,6 +20,12 @@
         i: 500
       }
 
+      function fail()
+      {
+        alert("Конец игры");
+        location.reload();
+      }
+
       function getCursorPosition(canvas, event) {
             const rect = canvas.getBoundingClientRect();
             const x = event.clientX - rect.left;
@@ -29,12 +35,16 @@
                 if ((rect.width - x)* rect.height > y* rect.width)
                 {
                     console.log("вверх");
+                    if (state.dy == 1)
+                        return;
                     state.dy = -1;
                     state.dx = 0;
                 }
                 else
                 {
                     console.log("вправо");
+                    if (state.dx == -1)
+                        return;
                     state.dy = 0;
                     state.dx = 1;
                 }
@@ -44,12 +54,16 @@
                 if ((rect.width - x)* rect.height > y* rect.width)
                 {
                     console.log("влево");
+                    if (state.dx == 1)
+                        return;
                     state.dy = 0;
                     state.dx = -1;
                 }
                 else
                 {
                     console.log("вниз");
+                    if (state.dy == -1)
+                        return;
                     state.dy = 1;
                     state.dx = 0;
                 }
@@ -87,6 +101,12 @@
             var last = state.s[state.s.length-1];
             state.s.push({x:last.x + state.dx, y:last.y + state.dy});
             last = state.s[state.s.length-1];
+
+            if (last.x <0 || last.y < 0 || last.x >= state.w || last.y >= state.h)
+            {
+                fail();
+            }
+
             if (last.x == state.f.x && last.y == state.f.y)
             {
                 state.f.x = Math.floor(Math.random() * state.w);
@@ -96,6 +116,12 @@
             else
             {
                 state.s.shift();
+            }
+            for (var i=0;i<state.s.length-1;i++)
+            {
+                var c = state.s[i];
+                if (c.x == last.x && c.y == last.y)
+                    fail();
             }
             for (const p of state.s)
             {
