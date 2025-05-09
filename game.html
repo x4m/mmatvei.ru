@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shadow Flip</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, html { margin: 0; padding: 0; overflow: hidden; background: #111; width: 100%; height: 100%; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #ui {
+      position: absolute;
+      bottom: 2vh;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 2vw;
+      z-index: 2;
+    }
+    button {
+      padding: 2vh 4vw;
+      font-size: 2vh;
+      border-radius: 10px;
+      border: none;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <button ontouchstart="startMove(-1)" ontouchend="stopMove()" onmousedown="startMove(-1)" onmouseup="stopMove()" onmouseleave="stopMove()">⬅️</button>
+    <button ontouchstart="jump()" onclick="jump()">🔼</button>
+    <button ontouchstart="startMove(1)" ontouchend="stopMove()" onmousedown="startMove(1)" onmouseup="stopMove()" onmouseleave="stopMove()">➡️</button>
+    <button onclick="flipWorld()">🌗 Flip</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    let scale = 1;
+    let baseWidth = 600;
+    let baseHeight = 400;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      scale = Math.min(canvas.width / baseWidth, canvas.height / baseHeight);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const playerImage = new Image();
+    playerImage.src = 'player.png';
+
+    const player = {
+      x: 50,
+      y: 300,
+      width: 30,
+      height: 30,
+      vx: 0,
+      vy: 0,
+      speed: 2,
+      jumpPower: -7,
+      grounded: false
+    };
+
+    const gravity = 0.3;
+    let worldDark = false;
+    let currentLevel = 0;
+
+    let keys = {};
+    let moveDirection = 0;
+
+    let levels = [
+      {
+        platforms: [
+          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
+          { x: 100, y: 300, w: 100, h: 10, world: 'light' },
+          { x: 250, y: 250, w: 100, h: 10, world: 'dark' },
+          { x: 400, y: 200, w: 100, h: 10, world: 'light' }
+        ],
+        portal: { x: 550, y: 180, w: 20, h: 20, world: 'light' },
+      },
+      {
+        platforms: [
+          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
+          { x: 150, y: 320, w: 100, h: 10, world: 'dark' },
+          { x: 300, y: 260, w: 100, h: 10, world: 'light' },
+          { x: 450, y: 200, w: 100, h: 10, world: 'dark' }
+        ],
+        portal: { x: 500, y: 180, w: 20, h: 20, world: 'dark' },
+      },
+      {
+        platforms: [
+          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
+          { x: 80, y: 320, w: 80, h: 10, world: 'light' },
+          { x: 180, y: 260, w: 80, h: 10, world: 'dark' },
+          { x: 280, y: 200, w: 80, h: 10, world: 'light' },
+          { x: 380, y: 140, w: 80, h: 10, world: 'dark' },
+        ],
+        portal: { x: 500, y: 120, w: 20, h: 20, world: 'light' },
+      },
+    ];
+
+    function transformCoord(x) { return x * scale; }
+
+    function drawPlayer() {
+      if (playerImage.complete && playerImage.naturalWidth !== 0) {
+        ctx.drawImage(playerImage, transformCoord(player.x), transformCoord(player.y), transformCoord(player.width), transformCoord(player.height));
+      } else {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(transformCoord(player.x), transformCoord(player.y), transformCoord(player.width), transformCoord(player.height));
+      }
+    }
+
+    function drawPlatform(p) {
+      const isVisible = worldDark
+        ? p.world === 'dark' || p.world === 'both'
+        : p.world === 'light' || p.world === 'both';
+      if (!isVisible) return;
+
+      ctx.fillStyle = worldDark ? '#444' : '#aaa';
+      ctx.fillRect(transformCoord(p.x), transformCoord(p.y), transformCoord(p.w), transformCoord(p.h));
+    }
+
+    function drawPortal(portal) {
+      if ((worldDark && portal.world === 'dark') || (!worldDark && portal.world === 'light')) {
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(transformCoord(portal.x), transformCoord(portal.y), transformCoord(portal.w), transformCoord(portal.h));
+      }
+    }
+
+    function update() {
+      if (keys['ArrowLeft'] || keys['KeyA'] || moveDirection === -1) player.vx = -player.speed;
+      else if (keys['ArrowRight'] || keys['KeyD'] || moveDirection === 1) player.vx = player.speed;
+      else player.vx = 0;
+
+      const level = levels[currentLevel];
+      player.vy += gravity;
+      player.x += player.vx;
+      player.y += player.vy;
+
+      player.grounded = false;
+
+      for (let p of level.platforms) {
+        const isVisible = worldDark ? p.world === 'dark' || p.world === 'both' : p.world === 'light' || p.world === 'both';
+        if (!isVisible) continue;
+
+        if (
+          player.x < p.x + p.w &&
+          player.x + player.width > p.x &&
+          player.y + player.height < p.y + 10 &&
+          player.y + player.height > p.y - 5 &&
+          player.vy >= 0
+        ) {
+          player.y = p.y - player.height;
+          player.vy = 0;
+          player.grounded = true;
+        }
+      }
+
+      const portal = level.portal;
+      if (
+        player.x < portal.x + portal.w &&
+        player.x + player.width > portal.x &&
+        player.y < portal.y + portal.h &&
+        player.y + player.height > portal.y &&
+        ((worldDark && portal.world === 'dark') || (!worldDark && portal.world === 'light'))
+      ) {
+        currentLevel++;
+        if (currentLevel >= levels.length) {
+          alert("Поздравляем! Вы прошли все уровни!");
+          currentLevel = 0;
+        }
+        reset();
+      }
+    }
+
+    function reset() {
+      player.x = 50;
+      player.y = 300;
+      player.vx = 0;
+      player.vy = 0;
+    }
+
+    function draw() {
+      ctx.fillStyle = worldDark ? '#333' : '#eee';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const level = levels[currentLevel];
+      for (let p of level.platforms) drawPlatform(p);
+      drawPortal(level.portal);
+      drawPlayer();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    playerImage.onload = () => loop();
+
+    function jump() { if (player.grounded) player.vy = player.jumpPower; }
+    function flipWorld() { worldDark = !worldDark; }
+    function startMove(dir) { moveDirection = dir; }
+    function stopMove() { moveDirection = 0; }
+
+    document.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') jump();
+      if (e.code === 'Space') flipWorld();
+    });
+
+    document.addEventListener('keyup', e => {
+      keys[e.code] = false;
+    });
+  </script>
+</body>
+</html>
