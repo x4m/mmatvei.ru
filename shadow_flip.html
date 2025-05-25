@@ -26,10 +26,19 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.5);
       cursor: pointer;
     }
+    #levelDisplay {
+      position: absolute;
+      top: 2vh;
+      left: 2vw;
+      color: white;
+      font-size: 2vh;
+      font-family: Arial, sans-serif;
+    }
   </style>
 </head>
 <body>
   <canvas id="game"></canvas>
+  <div id="levelDisplay">Level: 1/50</div>
   <div id="ui">
     <button ontouchstart="startMove(-1)" ontouchend="stopMove()" onmousedown="startMove(-1)" onmouseup="stopMove()" onmouseleave="stopMove()">⬅️</button>
     <button ontouchstart="jump()" onclick="jump()">🔼</button>
@@ -40,6 +49,7 @@
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+    const levelDisplay = document.getElementById('levelDisplay');
 
     let scale = 1;
     let baseWidth = 600;
@@ -64,7 +74,7 @@
       vx: 0,
       vy: 0,
       speed: 2,
-      jumpPower: -7,
+      jumpPower: -8,
       grounded: false
     };
 
@@ -75,36 +85,52 @@
     let keys = {};
     let moveDirection = 0;
 
-    let levels = [
-      {
-        platforms: [
-          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
-          { x: 100, y: 300, w: 100, h: 10, world: 'light' },
-          { x: 250, y: 250, w: 100, h: 10, world: 'dark' },
-          { x: 400, y: 200, w: 100, h: 10, world: 'light' }
-        ],
-        portal: { x: 550, y: 180, w: 20, h: 20, world: 'light' },
-      },
-      {
-        platforms: [
-          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
-          { x: 150, y: 320, w: 100, h: 10, world: 'dark' },
-          { x: 300, y: 260, w: 100, h: 10, world: 'light' },
-          { x: 450, y: 200, w: 100, h: 10, world: 'dark' }
-        ],
-        portal: { x: 500, y: 180, w: 20, h: 20, world: 'dark' },
-      },
-      {
-        platforms: [
-          { x: 0, y: 380, w: 600, h: 20, world: 'both' },
-          { x: 80, y: 320, w: 80, h: 10, world: 'light' },
-          { x: 180, y: 260, w: 80, h: 10, world: 'dark' },
-          { x: 280, y: 200, w: 80, h: 10, world: 'light' },
-          { x: 380, y: 140, w: 80, h: 10, world: 'dark' },
-        ],
-        portal: { x: 500, y: 120, w: 20, h: 20, world: 'light' },
-      },
-    ];
+    function generateLevel(levelNum) {
+      const platforms = [];
+      const baseY = 380;
+      
+      // Always add the base platform
+      platforms.push({ x: 0, y: baseY, w: 600, h: 20, world: 'both' });
+      
+      const platformCount = Math.min(5 + Math.floor(levelNum / 5), 15);
+      const maxHeight = 300 - (levelNum * 3);
+      const minGap = Math.max(50, 100 - levelNum * 2);
+      const maxGap = Math.max(70, 120 - levelNum * 2);
+      
+      let lastX = 50;
+      let lastY = baseY - 50;
+      
+      for (let i = 0; i < platformCount; i++) {
+        const width = 70 + Math.random() * 50;
+        const height = 10;
+        const x = lastX + minGap + Math.random() * (maxGap - minGap);
+        const y = Math.max(50, Math.min(lastY - 30 + (Math.random() * 60 - 30), baseY - 50));
+        
+        // Alternate between light and dark worlds
+        const world = i % 2 === 0 ? 'light' : 'dark';
+        
+        platforms.push({ x, y, w: width, h: height, world });
+        
+        lastX = x;
+        lastY = y;
+      }
+      
+      // Place portal at the end
+      const portalWorld = levelNum % 2 === 0 ? 'light' : 'dark';
+      const portalY = Math.max(50, lastY - 30);
+      const portalX = Math.min(550, lastX + 100);
+      
+      return {
+        platforms,
+        portal: { x: portalX, y: portalY, w: 20, h: 20, world: portalWorld }
+      };
+    }
+
+    // Generate 50 levels
+    let levels = [];
+    for (let i = 0; i < 50; i++) {
+      levels.push(generateLevel(i));
+    }
 
     function transformCoord(x) { return x * scale; }
 
@@ -144,6 +170,11 @@
       player.x += player.vx;
       player.y += player.vy;
 
+      // Boundary checks
+      if (player.x < 0) player.x = 0;
+      if (player.x > baseWidth - player.width) player.x = baseWidth - player.width;
+      if (player.y > baseHeight) reset(); // Fall off the bottom
+
       player.grounded = false;
 
       for (let p of level.platforms) {
@@ -173,11 +204,14 @@
       ) {
         currentLevel++;
         if (currentLevel >= levels.length) {
-          alert("Поздравляем! Вы прошли все уровни!");
+          alert("Поздравляем! Вы прошли все 50 уровней!");
           currentLevel = 0;
         }
         reset();
       }
+      
+      // Update level display
+      levelDisplay.textContent = `Level: ${currentLevel + 1}/50`;
     }
 
     function reset() {
@@ -185,6 +219,7 @@
       player.y = 300;
       player.vx = 0;
       player.vy = 0;
+      worldDark = false;
     }
 
     function draw() {
