@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>SandBox World</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  canvas { display: block; cursor: crosshair; image-rendering: pixelated; position: fixed; top: 0; left: 0; }
+
+  /* floating HUD */
+  #hud {
+    position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+    background: rgba(10,12,30,.82); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+    padding: 6px 10px; z-index: 10; user-select: none; max-width: 98vw;
+  }
+  #hud.hidden { opacity: 0; pointer-events: none; }
+  .tool-btn {
+    padding: 3px 9px; border: 2px solid transparent; border-radius: 6px;
+    cursor: pointer; font-size: 11px; background: #0f2244; color: #dde;
+    transition: all .12s; white-space: nowrap;
+  }
+  .tool-btn:hover { filter: brightness(1.4); }
+  .tool-btn.active { border-color: #e94560; background: #1a1a55; }
+  .sep { width: 1px; background: rgba(255,255,255,.15); height: 22px; flex-shrink: 0; }
+  #brush-wrap { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #aac; }
+  input[type=range] { width: 60px; accent-color: #a0c4ff; }
+
+  /* toggle tab */
+  #toggle {
+    position: fixed; top: 8px; right: 10px; z-index: 20;
+    background: rgba(10,12,30,.75); border: 1px solid rgba(255,255,255,.15);
+    color: #aac; font-size: 13px; border-radius: 6px; padding: 3px 7px;
+    cursor: pointer; backdrop-filter: blur(4px);
+  }
+  #hint {
+    position: fixed; bottom: 8px; right: 10px; font-size: 10px;
+    color: rgba(200,200,255,.4); z-index: 10; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span style="font-size:12px;color:#7af;font-weight:bold;white-space:nowrap">🌍 SandBox</span>
+  <div class="sep"></div>
+  <div id="tools"></div>
+  <div class="sep"></div>
+  <div id="brush-wrap">
+    Кисть: <input type="range" id="brush" min="1" max="12" value="3">
+    <span id="brush-val">3</span>
+  </div>
+  <div class="sep"></div>
+  <button class="tool-btn" id="btn-clear">Очистить</button>
+  <button class="tool-btn" id="btn-pause">⏸</button>
+</div>
+
+<button id="toggle" title="Скрыть/показать панель">≡</button>
+<div id="hint">ПКМ — стереть &nbsp;|&nbsp; H — скрыть панель</div>
+
+<script>
+const CELL = 6;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let COLS, ROWS;
+let grid, nextGrid, fuse; // fuse: countdown ticks per cell for TNT
+let paused = false;
+let mouseDown = false;
+let erasing = false;
+let currentTool = 'grass';
+let brushSize = 3;
+
+// --- TILE IDs ---
+const EMPTY = 0, GRASS = 1, WATER = 2, SAND = 3, STONE = 4;
+const LAVA  = 5, FIRE  = 6, SNOW  = 7, DIRT  = 8, TREE  = 9;
+const ICE   = 10, STEAM = 11, CLOUD = 12, TNT = 13, TNTLIT = 14;
+
+const COLORS = {
+  [EMPTY]:  '#0d0f1e',
+  [GRASS]:  '#4a8f3f',
+  [WATER]:  '#1e6091',
+  [SAND]:   '#c8a96e',
+  [STONE]:  '#7a7a8a',
+  [LAVA]:   '#cf4a1a',
+  [FIRE]:   '#f77f00',
+  [SNOW]:   '#ddeeff',
+  [DIRT]:   '#8b5e3c',
+  [TREE]:   '#2d5a1b',
+  [ICE]:    '#aaddff',
+  [STEAM]:  '#c8c8cc',
+  [CLOUD]:  '#e0e0ee',
+  [TNT]:    '#cc2200',
+  [TNTLIT]: '#ff6600',
+};
+
+const FIRE_COLORS = ['#ff4400','#ff7700','#ffaa00','#ffcc00','#ff2200'];
+const TNT_FUSE_TICKS = 80; // ticks before boom
+const TNT_RADIUS = 12;     // explosion radius in cells
+
+function tileColor(t, x, y) {
+  const base = COLORS[t] || COLORS[EMPTY];
+  const r = parseInt(base.slice(1,3),16);
+  const g = parseInt(base.slice(3,5),16);
+  const b = parseInt(base.slice(5,7),16);
+  const v = ((x*7 + y*13) % 16) - 8;
+  const c = n => Math.max(0, Math.min(255, n));
+  return `rgb(${c(r+v)},${c(g+v)},${c(b+v)})`;
+}
+
+const TOOLS = [
+  { id: 'grass', label: '🌿 Трава',  t: GRASS },
+  { id: 'dirt',  label: '🟫 Земля',  t: DIRT  },
+  { id: 'sand',  label: '🏖 Песок',  t: SAND  },
+  { id: 'water', label: '💧 Вода',   t: WATER },
+  { id: 'stone', label: '🪨 Камень', t: STONE },
+  { id: 'lava',  label: '🌋 Лава',   t: LAVA  },
+  { id: 'fire',  label: '🔥 Огонь',  t: FIRE  },
+  { id: 'snow',  label: '❄️ Снег',   t: SNOW  },
+  { id: 'tree',  label: '🌲 Дерево', t: TREE  },
+  { id: 'ice',   label: '🧊 Лёд',    t: ICE   },
+  { id: 'cloud', label: '☁️ Облако', t: CLOUD },
+  { id: 'tnt',   label: '💣 ТНТ',    t: TNT   },
+];
+
+// --- GRID ---
+function initGrid() {
+  grid     = new Uint8Array(COLS * ROWS);
+  nextGrid = new Uint8Array(COLS * ROWS);
+  fuse     = new Int16Array(COLS * ROWS); // -1 = not lit
+  fuse.fill(-1);
+}
+
+function idx(x, y) { return y * COLS + x; }
+function get(g, x, y) {
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return -1;
+  return g[idx(x, y)];
+}
+function set(g, x, y, v) {
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
+  g[idx(x, y)] = v;
+}
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  COLS = Math.floor(canvas.width  / CELL);
+  ROWS = Math.floor(canvas.height / CELL);
+  initGrid();
+}
+
+// --- UI ---
+const toolsEl = document.getElementById('tools');
+TOOLS.forEach(tool => {
+  const btn = document.createElement('button');
+  btn.className = 'tool-btn' + (tool.id === currentTool ? ' active' : '');
+  btn.textContent = tool.label;
+  btn.onclick = () => {
+    currentTool = tool.id;
+    document.querySelectorAll('.tool-btn[data-role=tool]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+  btn.dataset.role = 'tool';
+  toolsEl.appendChild(btn);
+});
+
+document.getElementById('brush').oninput = e => {
+  brushSize = +e.target.value;
+  document.getElementById('brush-val').textContent = brushSize;
+};
+document.getElementById('btn-clear').onclick = () => initGrid();
+document.getElementById('btn-pause').onclick = function() {
+  paused = !paused;
+  this.textContent = paused ? '▶️' : '⏸';
+};
+
+const hud = document.getElementById('hud');
+document.getElementById('toggle').onclick = () => hud.classList.toggle('hidden');
+document.addEventListener('keydown', e => {
+  if (e.key === 'h' || e.key === 'H') hud.classList.toggle('hidden');
+});
+
+// --- PAINTING ---
+function paint(cx, cy, erase) {
+  const r = brushSize - 1;
+  const toolDef = TOOLS.find(t => t.id === currentTool);
+  const tile = erase ? EMPTY : (toolDef ? toolDef.t : GRASS);
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx*dx + dy*dy <= r*r + r) {
+        const px = cx+dx, py = cy+dy;
+        set(grid, px, py, tile);
+        if (tile !== TNTLIT) {
+          const i = idx(px, py);
+          if (i >= 0 && i < fuse.length) fuse[i] = -1;
+        }
+      }
+    }
+  }
+}
+
+canvas.addEventListener('mousedown', e => {
+  mouseDown = true; erasing = e.button === 2;
+  const rect = canvas.getBoundingClientRect();
+  paint(Math.floor((e.clientX - rect.left)/CELL), Math.floor((e.clientY - rect.top)/CELL), erasing);
+});
+canvas.addEventListener('mousemove', e => {
+  if (!mouseDown) return;
+  const rect = canvas.getBoundingClientRect();
+  paint(Math.floor((e.clientX - rect.left)/CELL), Math.floor((e.clientY - rect.top)/CELL), erasing);
+});
+canvas.addEventListener('mouseup',    () => mouseDown = false);
+canvas.addEventListener('mouseleave', () => mouseDown = false);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// --- EXPLOSION ---
+function explode(cx, cy) {
+  const R = TNT_RADIUS;
+  // clear circle + scatter fire
+  for (let dy = -R; dy <= R; dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > R) continue;
+      const nx = cx+dx, ny = cy+dy;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+      const i = idx(nx, ny);
+      const t = grid[i];
+      if (t === STONE && Math.random() < .4) continue; // stone partly resists
+      // chain TNT
+      if ((t === TNT || t === TNTLIT) && fuse[i] < 0) {
+        grid[i] = TNTLIT;
+        fuse[i] = 5 + Math.floor(Math.random() * 15); // quick fuse
+        continue;
+      }
+      if (dist < R * .55) {
+        grid[i] = EMPTY; fuse[i] = -1;
+      } else {
+        grid[i] = FIRE; fuse[i] = -1;
+      }
+    }
+  }
+}
+
+// --- SIMULATION ---
+function simulate() {
+  nextGrid.set(grid);
+  const order = Array.from({length: COLS}, (_,i) => i).sort(() => Math.random() - .5);
+
+  for (let y = ROWS - 1; y >= 0; y--) {
+    for (const x of order) {
+      const i = idx(x, y);
+      const t = get(grid, x, y);
+      if (t === EMPTY) continue;
+
+      // --- TNTLIT fuse countdown ---
+      if (t === TNTLIT) {
+        if (fuse[i] > 0) {
+          fuse[i]--;
+          nextGrid[i] = TNTLIT;
+        } else {
+          nextGrid[i] = EMPTY;
+          fuse[i] = -1;
+          explode(x, y);
+        }
+        continue;
+      }
+
+      // --- TNT ignition from neighbors ---
+      if (t === TNT) {
+        const nb = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+        for (const [nx,ny] of nb) {
+          const nt = get(grid, nx, ny);
+          if (nt === FIRE || nt === LAVA || nt === TNTLIT) {
+            nextGrid[i] = TNTLIT;
+            fuse[i] = TNT_FUSE_TICKS;
+            break;
+          }
+        }
+        continue;
+      }
+
+      // --- WATER ---
+      if (t === WATER) {
+        // helper: can water move into this cell? check both original grid and nextGrid
+        const canFlow = (nx, ny) => get(grid, nx, ny) === EMPTY && get(nextGrid, nx, ny) === EMPTY;
+
+        if (canFlow(x, y+1)) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x, y+1, WATER);
+        } else if (get(grid, x, y+1) === LAVA || get(grid, x-1, y) === LAVA || get(grid, x+1, y) === LAVA) {
+          set(nextGrid, x, y, STEAM);
+        } else {
+          // try to spread sideways; also try diagonally down if side+below is free
+          const dir = Math.random() < .5 ? 1 : -1;
+          if (canFlow(x+dir, y)) {
+            set(nextGrid, x, y, EMPTY); set(nextGrid, x+dir, y, WATER);
+          } else if (canFlow(x-dir, y)) {
+            set(nextGrid, x, y, EMPTY); set(nextGrid, x-dir, y, WATER);
+          }
+          // else water stays — already in nextGrid from nextGrid.set(grid)
+        }
+        continue;
+      }
+
+      // --- SAND ---
+      if (t === SAND) {
+        const canSandMove = (nx, ny) => {
+          const gt = get(grid, nx, ny);
+          const nt = get(nextGrid, nx, ny);
+          return (gt === EMPTY || gt === WATER) && (nt === EMPTY || nt === WATER);
+        };
+        if (canSandMove(x, y+1)) {
+          const displaced = get(grid, x, y+1); // EMPTY or WATER
+          set(nextGrid, x, y, displaced); set(nextGrid, x, y+1, SAND);
+        } else {
+          const dir = Math.random() < .5 ? 1 : -1;
+          if (canSandMove(x+dir, y+1)) {
+            const displaced = get(grid, x+dir, y+1);
+            set(nextGrid, x, y, displaced); set(nextGrid, x+dir, y+1, SAND);
+          } else if (canSandMove(x-dir, y+1)) {
+            const displaced = get(grid, x-dir, y+1);
+            set(nextGrid, x, y, displaced); set(nextGrid, x-dir, y+1, SAND);
+          }
+        }
+        continue;
+      }
+
+      // --- LAVA ---
+      if (t === LAVA) {
+        const canLava = (nx, ny) => get(grid, nx, ny) === EMPTY && get(nextGrid, nx, ny) === EMPTY;
+        if (Math.random() < .003 && y > 0) set(nextGrid, x, y-1, FIRE);
+        if (canLava(x, y+1)) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x, y+1, LAVA);
+        } else if (get(grid, x, y+1) === WATER) {
+          set(nextGrid, x, y, STONE); set(nextGrid, x, y+1, STONE);
+        } else {
+          const dir = Math.random() < .5 ? 1 : -1;
+          if (canLava(x+dir, y)) {
+            set(nextGrid, x, y, EMPTY); set(nextGrid, x+dir, y, LAVA);
+          } else if (canLava(x-dir, y)) {
+            set(nextGrid, x, y, EMPTY); set(nextGrid, x-dir, y, LAVA);
+          }
+        }
+        continue;
+      }
+
+      // --- FIRE ---
+      if (t === FIRE) {
+        if (get(grid, x, y-1) === EMPTY && Math.random() < .4) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x, y-1, FIRE);
+        } else if (Math.random() < .06) {
+          set(nextGrid, x, y, EMPTY);
+        }
+        const nb = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+        for (const [nx,ny] of nb) {
+          const nt = get(grid, nx, ny);
+          if ((nt === GRASS || nt === TREE || nt === DIRT) && Math.random() < .015) set(nextGrid, nx, ny, FIRE);
+          if ((nt === SNOW || nt === ICE) && Math.random() < .02) set(nextGrid, nx, ny, WATER);
+        }
+        continue;
+      }
+
+      // --- SNOW ---
+      if (t === SNOW) {
+        if (get(grid, x, y+1) === EMPTY) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x, y+1, SNOW);
+        } else if (get(grid, x, y+1) === WATER || get(grid, x, y+1) === LAVA) {
+          set(nextGrid, x, y, ICE);
+        } else {
+          const dir = Math.random() < .5 ? 1 : -1;
+          if (get(grid, x+dir, y+1) === EMPTY) {
+            set(nextGrid, x, y, EMPTY); set(nextGrid, x+dir, y+1, SNOW);
+          }
+        }
+        continue;
+      }
+
+      // --- ICE ---
+      if (t === ICE) {
+        const nb = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+        for (const [nx,ny] of nb) {
+          const nt = get(grid, nx, ny);
+          if ((nt === LAVA || nt === FIRE) && Math.random() < .03) set(nextGrid, x, y, WATER);
+        }
+        continue;
+      }
+
+      // --- STEAM ---
+      if (t === STEAM) {
+        if (get(grid, x, y-1) === EMPTY && Math.random() < .5) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x, y-1, STEAM);
+        } else if (Math.random() < .02) {
+          set(nextGrid, x, y, CLOUD);
+        } else if (Math.random() < .005) {
+          set(nextGrid, x, y, EMPTY);
+        }
+        continue;
+      }
+
+      // --- CLOUD ---
+      if (t === CLOUD) {
+        const dir = (Math.floor(x/10) % 2 === 0) ? 1 : -1;
+        if (Math.random() < .3 && get(grid, x+dir, y) === EMPTY) {
+          set(nextGrid, x, y, EMPTY); set(nextGrid, x+dir, y, CLOUD);
+        }
+        if (Math.random() < .004 && get(grid, x, y+1) === EMPTY) set(nextGrid, x, y+1, WATER);
+        continue;
+      }
+
+      // --- TREE ---
+      if (t === TREE) {
+        if (Math.random() < .001) {
+          const dx = Math.floor(Math.random()*3)-1;
+          const dy = Math.floor(Math.random()*3)-1;
+          const nt = get(grid, x+dx, y+dy);
+          if ((nt === DIRT || nt === GRASS) && Math.random() < .5) set(nextGrid, x+dx, y+dy, TREE);
+        }
+        continue;
+      }
+
+      // --- GRASS ---
+      if (t === GRASS) {
+        if (Math.random() < .002) {
+          const dx = Math.floor(Math.random()*3)-1;
+          const dy = Math.floor(Math.random()*3)-1;
+          if (get(grid, x+dx, y+dy) === DIRT) set(nextGrid, x+dx, y+dy, GRASS);
+        }
+        continue;
+      }
+    }
+  }
+
+  grid.set(nextGrid);
+}
+
+// --- RENDER ---
+let frame = 0;
+function render() {
+  ctx.fillStyle = COLORS[EMPTY];
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const t = get(grid, x, y);
+      if (t === EMPTY) continue;
+
+      if (t === FIRE) {
+        ctx.fillStyle = FIRE_COLORS[frame % FIRE_COLORS.length | 0];
+      } else if (t === LAVA) {
+        ctx.fillStyle = (frame % 4 < 2) ? '#cf4a1a' : '#e86030';
+      } else if (t === WATER) {
+        ctx.fillStyle = (frame % 6 < 3) ? '#1e6091' : '#1a5580';
+      } else if (t === TNTLIT) {
+        // flash red/white as fuse burns
+        const i = idx(x, y);
+        ctx.fillStyle = (fuse[i] % 8 < 4) ? '#ff2200' : '#ffffff';
+      } else if (t === TNT) {
+        // draw red block with white X cross
+        ctx.fillStyle = tileColor(TNT, x, y);
+        ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x*CELL + 1,        y*CELL + CELL/2 - 1, CELL - 2, 2);
+        ctx.fillRect(x*CELL + CELL/2-1, y*CELL + 1,          2, CELL - 2);
+        continue;
+      } else {
+        ctx.fillStyle = tileColor(t, x, y);
+      }
+      ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
+    }
+  }
+  frame++;
+}
+
+let lastSim = 0;
+const SIM_INTERVAL = 40;
+
+function loop(ts) {
+  if (!paused && ts - lastSim > SIM_INTERVAL) {
+    simulate();
+    lastSim = ts;
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

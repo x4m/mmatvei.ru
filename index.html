@@ -1,23 +1,103 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dino</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mmatvei.ru</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d0f1e;
+    color: #eee;
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 300;
+    color: #a0c4ff;
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .sub {
+    color: #556;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    margin-bottom: 60px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    max-width: 900px;
+    width: 100%;
+  }
+  a.card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: #141628;
+    border: 1px solid #1e2245;
+    border-radius: 14px;
+    padding: 32px 20px;
+    text-decoration: none;
+    color: #dde;
+    transition: transform .18s, border-color .18s, background .18s;
+  }
+  a.card:hover {
+    transform: translateY(-4px);
+    border-color: #4a6aff;
+    background: #181c38;
+  }
+  .icon { font-size: 2.8rem; line-height: 1; }
+  .card-title { font-size: 1rem; font-weight: 600; letter-spacing: 1px; }
+  .card-desc { font-size: 0.75rem; color: #667; text-align: center; }
+  footer {
+    margin-top: 60px;
+    font-size: 0.72rem;
+    color: #334;
+    letter-spacing: 1px;
+  }
+</style>
 </head>
 <body>
-    <div id="win_screen" class="win_screen"></div>
-    <div class="game" id="game">
-        <div id="dino"></div>
-        <div id="cactus"></div>
-    </div>
-
-    <script src="script.js"></script>
-    <button onclick="restartGame()" hidden="true" id="restartButton">Перезапустить</button>
-    <br>
-    <a href="snake.html"> <button>Змейка</button></a>
-    <a href="shadow_flip.html"> <button>Шadow flip</button></a>
-    <a href="gd/index.html"> <button>Geometry фlip</button></a>
+<h1>mmatvei.ru</h1>
+<div class="sub">игры и эксперименты</div>
+<div class="grid">
+  <a class="card" href="worldbox.html">
+    <div class="icon">🌍</div>
+    <div class="card-title">SandBox</div>
+    <div class="card-desc">Симулятор мира — вода, лава, ТНТ и всё такое</div>
+  </a>
+  <a class="card" href="dino.html">
+    <div class="icon">🦕</div>
+    <div class="card-title">Динозавр</div>
+    <div class="card-desc">Бесконечный бег через кактусы</div>
+  </a>
+  <a class="card" href="snake.html">
+    <div class="icon">🐍</div>
+    <div class="card-title">Змейка</div>
+    <div class="card-desc">Классическая змейка</div>
+  </a>
+  <a class="card" href="shadow_flip.html">
+    <div class="icon">👤</div>
+    <div class="card-title">Shadow Flip</div>
+    <div class="card-desc">Платформер с тенью</div>
+  </a>
+  <a class="card" href="gd/index.html">
+    <div class="icon">📐</div>
+    <div class="card-title">Geometry Flip</div>
+    <div class="card-desc">Ритм-раннер в стиле GD</div>
+  </a>
+</div>
+<footer>mmatvei.ru</footer>
 </body>
 </html>
