@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Clone — Three.js</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:monospace; }
+  #c { display:block; width:100%; height:100%; }
+
+  #crosshair { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:22px; height:22px; pointer-events:none; z-index:10; mix-blend-mode:difference; display:none; }
+  #crosshair::before,#crosshair::after { content:""; position:absolute; background:#fff; }
+  #crosshair::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
+  #crosshair::after { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
+
+  #hotbar { position:fixed; left:50%; bottom:16px; transform:translateX(-50%);
+    display:none; gap:4px; padding:4px; background:rgba(0,0,0,.35);
+    border:2px solid rgba(255,255,255,.4); border-radius:4px; z-index:10; }
+  .slot { width:50px; height:50px; position:relative; background:rgba(0,0,0,.3);
+    border:2px solid rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; }
+  .slot.active { border-color:#fff; box-shadow:0 0 0 2px #fff inset; }
+  .slot canvas { width:38px; height:38px; image-rendering:pixelated; }
+  .slot .num { position:absolute; top:0; left:2px; font-size:10px; color:#fff; text-shadow:1px 1px 0 #000; }
+  .slot .cnt { position:absolute; bottom:0; right:2px; font-size:11px; color:#fff; text-shadow:1px 1px 0 #000; }
+  .slot .name { position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
+    font-size:10px; color:#fff; white-space:nowrap; text-shadow:1px 1px 0 #000; opacity:0; }
+  .slot.active .name { opacity:1; }
+
+  #hearts { position:fixed; left:50%; bottom:74px; transform:translateX(-50%);
+    display:none; gap:1px; z-index:10; }
+  .heart { width:16px; height:16px; }
+
+  #info { position:fixed; top:8px; left:8px; z-index:10; color:#fff; font-size:12px;
+    text-shadow:1px 1px 0 #000; line-height:1.5; pointer-events:none; display:none; }
+  #prompt { position:fixed; left:50%; top:62%; transform:translateX(-50%); z-index:10;
+    color:#fff; font-size:16px; text-shadow:2px 2px 0 #000; display:none; pointer-events:none;
+    background:rgba(0,0,0,.4); padding:6px 14px; border-radius:4px; }
+  #loading { position:fixed; bottom:12px; right:12px; color:#fff; font-size:11px;
+    text-shadow:1px 1px 0 #000; z-index:10; }
+  #toast { position:fixed; left:50%; top:14%; transform:translateX(-50%); z-index:15;
+    color:#fff; font-size:14px; text-shadow:1px 1px 0 #000; background:rgba(0,0,0,.5);
+    padding:6px 14px; border-radius:4px; display:none; }
+
+  /* generic panel overlay */
+  .panel { position:fixed; inset:0; z-index:100; display:none; flex-direction:column;
+    align-items:center; justify-content:center; color:#fff; text-align:center;
+    background:rgba(0,0,0,.6); }
+  .panel.show { display:flex; }
+  .card { background:rgba(20,20,28,.92); border:2px solid rgba(255,255,255,.18);
+    border-radius:8px; padding:26px 34px; min-width:340px; max-height:86vh; overflow:auto; }
+  h1 { font-size:40px; letter-spacing:3px; margin-bottom:6px; text-shadow:3px 3px 0 #000; }
+  h2 { font-size:20px; margin:14px 0 10px; color:#ffd86b; }
+  .sub { font-size:13px; opacity:.8; margin-bottom:18px; }
+  label { display:block; font-size:13px; text-align:left; margin:10px 0 4px; opacity:.85; }
+  input,select { width:100%; padding:8px; font-family:monospace; font-size:14px;
+    background:#111; color:#fff; border:1px solid #444; border-radius:4px; }
+  .btn { display:inline-block; cursor:pointer; margin:6px 4px 0; padding:10px 22px; font-size:15px;
+    background:#4a8f3c; border:2px solid #2f5e26; border-radius:4px; color:#fff;
+    text-shadow:1px 1px 0 #000; }
+  .btn:hover { filter:brightness(1.12); }
+  .btn.alt { background:#3c6e8f; border-color:#264a5e; }
+  .btn.red { background:#8f3c3c; border-color:#5e2626; }
+  .btn:disabled { background:#555; border-color:#333; cursor:not-allowed; opacity:.6; }
+  .keys { font-size:13px; line-height:1.8; margin-top:14px; opacity:.85; }
+  .keys b { color:#ffd86b; }
+
+  .worldrow { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:rgba(255,255,255,.06); border:1px solid #333; border-radius:4px;
+    padding:8px 10px; margin:6px 0; }
+  .worldrow .meta { text-align:left; font-size:12px; }
+  .worldrow .meta b { font-size:14px; }
+
+  /* crafting */
+  .recipe { display:flex; align-items:center; gap:12px; background:rgba(255,255,255,.05);
+    border:1px solid #333; border-radius:4px; padding:8px 10px; margin:6px 0; }
+  .recipe canvas { width:40px; height:40px; image-rendering:pixelated; flex:0 0 auto; }
+  .recipe .desc { flex:1; text-align:left; font-size:12px; }
+  .recipe .desc b { font-size:14px; }
+  .ing { display:inline-block; margin-right:8px; }
+  .ing.ok { color:#9be08a; } .ing.no { color:#e08a8a; }
+
+  .planetgrid { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+  .planetcard { width:150px; cursor:pointer; background:rgba(255,255,255,.06);
+    border:2px solid #444; border-radius:8px; padding:14px; }
+  .planetcard:hover { border-color:#ffd86b; }
+  .planetcard .dot { width:64px; height:64px; border-radius:50%; margin:0 auto 8px; }
+  .planetcard .pn { font-size:16px; } .planetcard .pd { font-size:11px; opacity:.75; margin-top:4px; }
+
+  #flightCanvas { position:fixed; inset:0; width:100%; height:100%; z-index:120; display:none; background:#000; }
+  #flightText { position:fixed; left:50%; top:18%; transform:translateX(-50%); z-index:121;
+    color:#fff; font-size:24px; text-shadow:2px 2px 0 #000; display:none; letter-spacing:2px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="crosshair"></div>
+<div id="hotbar"></div>
+<div id="hearts"></div>
+<div id="info"></div>
+<div id="prompt"></div>
+<div id="loading"></div>
+<div id="toast"></div>
+
+<!-- click to play -->
+<div id="overlay" class="panel">
+  <div class="card">
+    <h1>▶</h1>
+    <div class="sub">Кликни, чтобы играть</div>
+    <div class="keys">
+      <b>WASD</b> ходьба · <b>Мышь</b> обзор · <b>Space</b> прыжок · <b>Shift</b> бег<br>
+      <b>ЛКМ</b> ломать · <b>ПКМ</b> ставить · <b>1–9 / колесо</b> выбор<br>
+      <b>E</b> верстак/ракета · <b>C</b> крафт · <b>F</b> полёт · <b>Esc</b> меню
+    </div>
+  </div>
+</div>
+
+<!-- main menu -->
+<div id="menu" class="panel show">
+  <div class="card">
+    <h1>MINECRAFT</h1>
+    <div class="sub">клон на Three.js · с ракетами и планетами</div>
+    <h2>Создать мир</h2>
+    <label>Название мира</label>
+    <input id="mName" value="Мой мир">
+    <label>Сид (пусто = случайный)</label>
+    <input id="mSeed" placeholder="например 12345 или любой текст">
+    <label>Режим</label>
+    <select id="mMode">
+      <option value="survival">Выживание</option>
+      <option value="creative">Креатив</option>
+    </select>
+    <div><button class="btn" id="mCreate">Создать мир</button></div>
+    <h2>Загрузить мир</h2>
+    <div id="worldList"></div>
+  </div>
+</div>
+
+<!-- pause -->
+<div id="pause" class="panel">
+  <div class="card">
+    <h1 style="font-size:30px">Пауза</h1>
+    <div><button class="btn" id="pResume">Продолжить</button></div>
+    <div><button class="btn alt" id="pSave">Сохранить</button></div>
+    <div><button class="btn red" id="pQuit">Сохранить и выйти в меню</button></div>
+  </div>
+</div>
+
+<!-- crafting -->
+<div id="craftui" class="panel">
+  <div class="card">
+    <h1 style="font-size:26px">Верстак</h1>
+    <div class="sub" id="craftHint">Кликни «Создать», если хватает ресурсов</div>
+    <div id="recipeList"></div>
+    <div><button class="btn alt" id="craftClose">Закрыть (E)</button></div>
+  </div>
+</div>
+
+<!-- planet selection -->
+<div id="planetui" class="panel">
+  <div class="card">
+    <h1 style="font-size:26px">Куда летим?</h1>
+    <div class="planetgrid" id="planetGrid"></div>
+    <div><button class="btn alt" id="planetClose">Отмена</button></div>
+  </div>
+</div>
+
+<canvas id="flightCanvas"></canvas>
+<div id="flightText"></div>
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script>
+"use strict";
+
+/* ============================================================================ CONFIG */
+const CHUNK_SIZE=16, WORLD_HEIGHT=64, SEA_LEVEL=30, RENDER_DIST=6;
+const TILE=16, TILES_PER_ROW=8, REACH=6, MAX_MOBS=8;
+
+/* ============================================================================ TILES */
+const TILE_ID={
+  grass_top:0,grass_side:1,dirt:2,stone:3,sand:4,log_top:5,log_side:6,leaves:7,
+  planks:8,cobble:9,bedrock:10,water:11,glass:12,brick:13,snow:14,gravel:15,
+  ct_top:16,ct_side:17,moon_dust:18,moon_rock:19,mars_sand:20,mars_rock:21,merc_rock:22
+};
+
+/* ============================================================================ BLOCKS */
+const BLOCK={
+  air:    {id:0, solid:false, transparent:true},
+  grass:  {id:1, solid:true, name:"Трава",       tiles:[1,1,0,2,1,1]},
+  dirt:   {id:2, solid:true, name:"Земля",        tiles:[2,2,2,2,2,2]},
+  stone:  {id:3, solid:true, name:"Камень",       tiles:[3,3,3,3,3,3]},
+  sand:   {id:4, solid:true, name:"Песок",        tiles:[4,4,4,4,4,4]},
+  log:    {id:5, solid:true, name:"Бревно",       tiles:[6,6,5,5,6,6]},
+  leaves: {id:6, solid:true, name:"Листва",       tiles:[7,7,7,7,7,7]},
+  planks: {id:7, solid:true, name:"Доски",        tiles:[8,8,8,8,8,8]},
+  cobble: {id:8, solid:true, name:"Булыжник",     tiles:[9,9,9,9,9,9]},
+  bedrock:{id:9, solid:true, name:"Бедрок",       tiles:[10,10,10,10,10,10]},
+  water:  {id:10,solid:false,transparent:true, name:"Вода", tiles:[11,11,11,11,11,11]},
+  glass:  {id:11,solid:true, transparent:true, name:"Стекло", tiles:[12,12,12,12,12,12]},
+  brick:  {id:12,solid:true, name:"Кирпич",       tiles:[13,13,13,13,13,13]},
+  snow:   {id:13,solid:true, name:"Снег",         tiles:[14,14,14,14,14,14]},
+  gravel: {id:14,solid:true, name:"Гравий",       tiles:[15,15,15,15,15,15]},
+  crafting_table:{id:15,solid:true,name:"Верстак",tiles:[17,17,16,8,17,17]},
+  moon_dust:{id:16,solid:true,name:"Лунная пыль", tiles:[18,18,18,18,18,18]},
+  moon_rock:{id:17,solid:true,name:"Лунный камень",tiles:[19,19,19,19,19,19]},
+  mars_sand:{id:18,solid:true,name:"Марс. песок", tiles:[20,20,20,20,20,20]},
+  mars_rock:{id:19,solid:true,name:"Марс. камень",tiles:[21,21,21,21,21,21]},
+  merc_rock:{id:20,solid:true,name:"Меркур. камень",tiles:[22,22,22,22,22,22]},
+};
+const BY_ID={};
+for(const k in BLOCK){ BLOCK[k].key=k; BY_ID[BLOCK[k].id]=BLOCK[k]; }
+function isSolid(id){ const b=BY_ID[id]; return b?b.solid:false; }
+function isTransparent(id){ const b=BY_ID[id]; return b?!!b.transparent:true; }
+
+/* ============================================================================ NON-BLOCK ITEMS */
+const ITEMS={ // for crafting only (not placeable except rocket)
+  stick:{name:"Палка"}, metal_plate:{name:"Металл. пластина"},
+  engine:{name:"Двигатель"}, fuel:{name:"Топливо"}, rocket:{name:"Ракета"}
+};
+function itemName(id){ return BLOCK[id]?BLOCK[id].name : (ITEMS[id]?ITEMS[id].name:id); }
+
+/* ============================================================================ RECIPES */
+const RECIPES=[
+  {out:["planks",4], in:{log:1}},
+  {out:["stick",4],  in:{planks:2}},
+  {out:["crafting_table",1], in:{planks:4}},
+  {out:["glass",2],  in:{sand:4}},
+  {out:["brick",4],  in:{stone:4}},
+  {out:["cobble",4], in:{stone:4}},
+  {out:["metal_plate",1], in:{stone:5}},
+  {out:["fuel",4],   in:{sand:2, gravel:2}},
+  {out:["engine",1], in:{metal_plate:4, stick:2}},
+  {out:["rocket",1], in:{metal_plate:8, engine:1, glass:2, fuel:4}},
+];
+
+/* ============================================================================ ATLAS */
+let ATLAS;
+function buildAtlas(){
+  const size=TILES_PER_ROW*TILE;
+  const cv=document.createElement("canvas"); cv.width=cv.height=size;
+  const ctx=cv.getContext("2d"); ctx.clearRect(0,0,size,size);
+  let s=1337; const rnd=()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; };
+  const shade=(hex,a)=>{ let r=(hex>>16)&255,g=(hex>>8)&255,b=hex&255;
+    r=Math.max(0,Math.min(255,r+a));g=Math.max(0,Math.min(255,g+a));b=Math.max(0,Math.min(255,b+a));
+    return `rgb(${r|0},${g|0},${b|0})`; };
+  const tpos=i=>[ (i%TILES_PER_ROW)*TILE, ((i/TILES_PER_ROW)|0)*TILE ];
+  const px=(i,x,y,c)=>{ const[tx,ty]=tpos(i); ctx.fillStyle=c; ctx.fillRect(tx+x,ty+y,1,1); };
+  const noisy=(i,base,v)=>{ for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++) px(i,x,y,shade(base,(rnd()*2-1)*v)); };
+
+  noisy(TILE_ID.grass_top,0x5fa83c,28);
+  noisy(TILE_ID.dirt,0x77553a,22);
+  noisy(TILE_ID.grass_side,0x77553a,22);
+  for(let x=0;x<TILE;x++){ const h=3+((rnd()*3)|0); for(let y=0;y<h;y++) px(TILE_ID.grass_side,x,y,shade(0x5fa83c,(rnd()*2-1)*28)); }
+  noisy(TILE_ID.stone,0x888888,24);
+  noisy(TILE_ID.sand,0xded09a,18);
+  noisy(TILE_ID.log_top,0xb59055,14);
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ const d=Math.sqrt((x-7.5)**2+(y-7.5)**2); if((d|0)%2===0) px(TILE_ID.log_top,x,y,shade(0x8a6b3a,(rnd()*2-1)*10)); }
+  for(let x=0;x<TILE;x++)for(let y=0;y<TILE;y++) px(TILE_ID.log_side,x,y,shade(0x6e5230,(rnd()*2-1)*16+(x%4===0?-12:0)));
+  noisy(TILE_ID.leaves,0x3f7d2a,30);
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ let v=(rnd()*2-1)*12; if(y%4===0)v-=22; if(x===0&&y%8<4)v-=18; px(TILE_ID.planks,x,y,shade(0xb5905a,v)); }
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ const cell=(((x>>2)*3+(y>>2)*7)%5); px(TILE_ID.cobble,x,y,shade(0x8d8d8d,(rnd()*2-1)*18+(cell<1?-30:0))); }
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++) px(TILE_ID.bedrock,x,y,shade(0x3a3a3a,rnd()<0.5?-25:25));
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ const[tx,ty]=tpos(TILE_ID.water); ctx.fillStyle="rgba(40,90,200,0.72)"; ctx.fillRect(tx+x,ty+y,1,1); if(rnd()<0.12){ ctx.fillStyle="rgba(90,150,255,0.75)"; ctx.fillRect(tx+x,ty+y,1,1);} }
+  { const[tx,ty]=tpos(TILE_ID.glass); ctx.clearRect(tx,ty,TILE,TILE); ctx.fillStyle="rgba(200,230,255,0.12)"; ctx.fillRect(tx,ty,TILE,TILE);
+    ctx.fillStyle="rgba(210,235,255,0.85)"; ctx.fillRect(tx,ty,TILE,1); ctx.fillRect(tx,ty+TILE-1,TILE,1); ctx.fillRect(tx,ty,1,TILE); ctx.fillRect(tx+TILE-1,ty,1,TILE); }
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++) px(TILE_ID.brick,x,y,shade(0xa1422f,(rnd()*2-1)*10));
+  for(let y=0;y<TILE;y+=4)for(let x=0;x<TILE;x++) px(TILE_ID.brick,x,y,"#cfcabb");
+  for(let y=0;y<TILE;y++){ const off=((y>>2)%2)*4; for(let x=off;x<TILE;x+=8) px(TILE_ID.brick,x,y,"#cfcabb"); }
+  noisy(TILE_ID.snow,0xf4f8ff,8);
+  noisy(TILE_ID.gravel,0x8a8175,26);
+  // crafting table
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ let v=(rnd()*2-1)*12; if(y%4===0)v-=18; px(TILE_ID.ct_top,x,y,shade(0xb5905a,v)); }
+  ctx.fillStyle="#5a4426"; { const[tx,ty]=tpos(TILE_ID.ct_top); ctx.fillRect(tx+7,ty,2,TILE); ctx.fillRect(tx,ty+7,TILE,2); ctx.fillRect(tx+5,ty+5,6,6); }
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){ let v=(rnd()*2-1)*12; if(y%4===0)v-=18; px(TILE_ID.ct_side,x,y,shade(0xb5905a,v)); }
+  { const[tx,ty]=tpos(TILE_ID.ct_side); ctx.fillStyle="#5a4426"; ctx.fillRect(tx+2,ty+2,5,5); ctx.fillRect(tx+9,ty+8,4,4); }
+  noisy(TILE_ID.moon_dust,0xb9b9b3,10);
+  for(let i=0;i<14;i++) px(TILE_ID.moon_dust,(rnd()*TILE)|0,(rnd()*TILE)|0,shade(0x8a8a86,0));
+  noisy(TILE_ID.moon_rock,0x8a8a86,20);
+  noisy(TILE_ID.mars_sand,0xb84a28,18);
+  noisy(TILE_ID.mars_rock,0x7a3a22,22);
+  for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++) px(TILE_ID.merc_rock,x,y,shade(0x6b6b6b,(rnd()*2-1)*22+(((x+y)%6===0)?-26:0)));
+
+  const tex=new THREE.CanvasTexture(cv);
+  tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter; tex.generateMipmaps=false;
+  ATLAS=tex; return tex;
+}
+
+/* ============================================================================ NOISE (seedable) */
+function makeNoise(seed){
+  let st=seed>>>0;
+  const rng=()=>{ st|=0; st=(st+0x6D2B79F5)|0; let t=Math.imul(st^(st>>>15),1|st); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
+  const perm=new Uint8Array(256); for(let i=0;i<256;i++)perm[i]=i;
+  for(let i=255;i>0;i--){ const j=(rng()*(i+1))|0; const t=perm[i]; perm[i]=perm[j]; perm[j]=t; }
+  const p=new Uint8Array(512); for(let i=0;i<512;i++)p[i]=perm[i&255];
+  const fade=t=>t*t*t*(t*(t*6-15)+10), lerp=(a,b,t)=>a+t*(b-a);
+  const grad=(h,x,y)=>{ const u=(h&1)?-x:x, v=(h&2)?-y:y; return u+v; };
+  function perlin2(x,y){ const X=Math.floor(x)&255,Y=Math.floor(y)&255; x-=Math.floor(x); y-=Math.floor(y);
+    const u=fade(x),v=fade(y), aa=p[p[X]+Y],ab=p[p[X]+Y+1],ba=p[p[X+1]+Y],bb=p[p[X+1]+Y+1];
+    return lerp(lerp(grad(aa,x,y),grad(ba,x-1,y),u),lerp(grad(ab,x,y-1),grad(bb,x-1,y-1),u),v); }
+  function fbm(x,y,oct,lac,gain){ let amp=1,freq=1,sum=0,norm=0; for(let i=0;i<oct;i++){ sum+=perlin2(x*freq,y*freq)*amp; norm+=amp; amp*=gain; freq*=lac;} return sum/norm; }
+  const hseed=seed>>>0;
+  function hash(x,z){ let h=((x*374761393)^(z*668265263)^hseed)>>>0; h=Math.imul(h^(h>>>13),1274126177)>>>0; return (h>>>0)/4294967296; }
+  return {perlin2,fbm,hash};
+}
+
+/* ============================================================================ PLANETS */
+const PLANETS={
+  earth:  {name:"Земля",   sky:0x9ad0ff, gravity:28, jump:9.2, sun:0xffffff, sunI:0.95, hemi:[0xbfdfff,0x6b5436,0.65], amb:0.25, stars:false, off:0,     mobs:["pig","cow","zombie"]},
+  moon:   {name:"Луна",    sky:0x06070d, gravity:6,  jump:9.2, sun:0xffffff, sunI:1.25, hemi:[0x20222e,0x101014,0.25], amb:0.12, stars:true,  off:10007, mobs:["alien"]},
+  mars:   {name:"Марс",    sky:0xc97c52, gravity:11, jump:9.2, sun:0xffd9b0, sunI:1.05, hemi:[0xc98b6b,0x3a1f12,0.55], amb:0.30, stars:false, off:20011, mobs:["martian"]},
+  mercury:{name:"Меркурий",sky:0x141417, gravity:10, jump:9.2, sun:0xffffff, sunI:1.6,  hemi:[0x303036,0x101012,0.22], amb:0.10, stars:true,  off:30013, mobs:["rockling"]},
+};
+const PLANET_DESC={ earth:"Дом. Трава, вода, деревья.", moon:"Низкая гравитация, кратеры.", mars:"Красные пустыни.", mercury:"Скалы и жара." };
+const PLANET_COLOR={ earth:"#3a7d44", moon:"#bdbdb3", mars:"#b84a28", mercury:"#6b6b6b" };
+
+/* ============================================================================ WORLD STATE */
+let worldName="", baseSeed=0, gameMode="survival", currentPlanet="earth";
+const planetStore={};            // name -> {edits:Map, rockets:[], noise}
+let chunks=new Map();            // active chunks of current planet
+let inventory={};                // item id -> count
+
+function getPlanetData(name){
+  if(!planetStore[name]) planetStore[name]={ edits:new Map(), rockets:[], noise:makeNoise((baseSeed+PLANETS[name].off)>>>0) };
+  return planetStore[name];
+}
+const ckey=(cx,cz)=>cx+","+cz;
+
+/* ============================================================================ TERRAIN GEN */
+function genColumn(planet,noise,wx,wz,setAt){
+  const P=PLANETS[planet];
+  if(planet==="earth"){
+    const n=noise.fbm(wx*0.012,wz*0.012,5,2,0.5), d=noise.fbm(wx*0.05,wz*0.05,3,2,0.5);
+    let h=Math.floor(SEA_LEVEL+2+n*16+d*3); h=Math.max(1,Math.min(WORLD_HEIGHT-1,h));
+    const beach=h<=SEA_LEVEL+1;
+    for(let y=0;y<=h;y++){ let id;
+      if(y===0)id=9; else if(y<h-3)id=3; else if(y<h)id=beach?4:2;
+      else id=beach?4:(h>SEA_LEVEL+18?13:1); setAt(y,id); }
+    for(let y=h+1;y<=SEA_LEVEL;y++) setAt(y,10);
+    if(!beach&&h>SEA_LEVEL+1&&h<SEA_LEVEL+18&&noise.hash(wx,wz)<0.02) return {tree:true,h};
+    return {h};
+  }
+  if(planet==="moon"){
+    const n=noise.fbm(wx*0.02,wz*0.02,4,2,0.5);
+    let crater=Math.abs(noise.fbm(wx*0.06+99,wz*0.06+99,2,2,0.5));
+    let h=Math.floor(SEA_LEVEL+n*6 - (crater<0.12?5:0)); h=Math.max(1,Math.min(WORLD_HEIGHT-1,h));
+    for(let y=0;y<=h;y++){ let id; if(y===0)id=9; else if(y<h-2)id=17; else id=16; setAt(y,id); }
+    if(noise.hash(wx,wz)<0.012) setAt(h+1,17);
+    return {h};
+  }
+  if(planet==="mars"){
+    const n=noise.fbm(wx*0.014,wz*0.014,5,2,0.5), mesa=noise.fbm(wx*0.04+7,wz*0.04+7,2,2,0.5);
+    let h=Math.floor(SEA_LEVEL+n*10+(mesa>0.4?6:0)); h=Math.max(1,Math.min(WORLD_HEIGHT-1,h));
+    for(let y=0;y<=h;y++){ let id; if(y===0)id=9; else if(y<h-3)id=19; else id=18; setAt(y,id); }
+    if(noise.hash(wx,wz)<0.012) setAt(h+1,19);
+    return {h};
+  }
+  // mercury
+  const n=noise.fbm(wx*0.02,wz*0.02,5,2.1,0.5);
+  let crater=Math.abs(noise.fbm(wx*0.07+33,wz*0.07+33,2,2,0.5));
+  let h=Math.floor(SEA_LEVEL+n*14-(crater<0.1?6:0)); h=Math.max(1,Math.min(WORLD_HEIGHT-1,h));
+  for(let y=0;y<=h;y++){ let id; if(y===0)id=9; else if(y<h-4)id=3; else id=20; setAt(y,id); }
+  if(noise.hash(wx,wz)<0.01) setAt(h+1,20);
+  return {h};
+}
+
+function generateChunkData(planet,cx,cz){
+  const pd=getPlanetData(planet); const noise=pd.noise;
+  const data=new Uint8Array(CHUNK_SIZE*CHUNK_SIZE*WORLD_HEIGHT);
+  const idx=(x,y,z)=>x+z*CHUNK_SIZE+y*CHUNK_SIZE*CHUNK_SIZE;
+  for(let lx=0;lx<CHUNK_SIZE;lx++)for(let lz=0;lz<CHUNK_SIZE;lz++){
+    const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
+    const r=genColumn(planet,noise,wx,wz,(y,id)=>{ if(y>=0&&y<WORLD_HEIGHT) data[idx(lx,y,lz)]=id; });
+    if(r&&r.tree&&lx>=2&&lx<=CHUNK_SIZE-3&&lz>=2&&lz<=CHUNK_SIZE-3){
+      const th=4+((noise.hash(wx+1,wz+7)*3)|0), topY=r.h+th;
+      for(let dy=-2;dy<=1;dy++){ const ly=topY-1+dy, rad=(dy>=0)?1:2;
+        for(let ox=-rad;ox<=rad;ox++)for(let oz=-rad;oz<=rad;oz++){
+          if(Math.abs(ox)===rad&&Math.abs(oz)===rad&&noise.hash(wx+ox,wz+oz)<0.5)continue;
+          const pxl=lx+ox,pzl=lz+oz; if(pxl<0||pxl>=CHUNK_SIZE||pzl<0||pzl>=CHUNK_SIZE||ly<0||ly>=WORLD_HEIGHT)continue;
+          if(data[idx(pxl,ly,pzl)]===0) data[idx(pxl,ly,pzl)]=6; } }
+      for(let y=r.h+1;y<=topY-1;y++) if(y<WORLD_HEIGHT) data[idx(lx,y,lz)]=5;
+    }
+  }
+  // apply player edits
+  const sx=cx*CHUNK_SIZE, sz=cz*CHUNK_SIZE;
+  pd.edits.forEach((id,key)=>{ const[ex,ey,ez]=key.split(",").map(Number);
+    if(ex>=sx&&ex<sx+CHUNK_SIZE&&ez>=sz&&ez<sz+CHUNK_SIZE&&ey>=0&&ey<WORLD_HEIGHT)
+      data[(ex-sx)+(ez-sz)*CHUNK_SIZE+ey*CHUNK_SIZE*CHUNK_SIZE]=id; });
+  return data;
+}
+
+function getChunk(cx,cz){ const k=ckey(cx,cz); let c=chunks.get(k);
+  if(!c){ c={cx,cz,data:null,mesh:null,tmesh:null,dirty:true}; chunks.set(k,c); }
+  if(!c.data) c.data=generateChunkData(currentPlanet,cx,cz); return c; }
+function getBlock(x,y,z){ if(y<0||y>=WORLD_HEIGHT)return 0;
+  const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE),c=getChunk(cx,cz);
+  return c.data[(x-cx*CHUNK_SIZE)+(z-cz*CHUNK_SIZE)*CHUNK_SIZE+y*CHUNK_SIZE*CHUNK_SIZE]; }
+function setBlock(x,y,z,id){ if(y<0||y>=WORLD_HEIGHT)return;
+  const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE),c=getChunk(cx,cz);
+  c.data[(x-cx*CHUNK_SIZE)+(z-cz*CHUNK_SIZE)*CHUNK_SIZE+y*CHUNK_SIZE*CHUNK_SIZE]=id; c.dirty=true;
+  getPlanetData(currentPlanet).edits.set(x+","+y+","+z,id);
+  const lx=x-cx*CHUNK_SIZE, lz=z-cz*CHUNK_SIZE;
+  if(lx===0)markDirty(cx-1,cz); if(lx===CHUNK_SIZE-1)markDirty(cx+1,cz);
+  if(lz===0)markDirty(cx,cz-1); if(lz===CHUNK_SIZE-1)markDirty(cx,cz+1); }
+function markDirty(cx,cz){ const c=chunks.get(ckey(cx,cz)); if(c)c.dirty=true; }
+function surfaceHeight(x,z){ for(let y=WORLD_HEIGHT-1;y>0;y--) if(isSolid(getBlock(x,y,z))) return y; return SEA_LEVEL; }
+
+/* ============================================================================ MESHING */
+const FACES=[
+  {d:[1,0,0],n:[1,0,0],c:[[1,0,1],[1,1,1],[1,1,0],[1,0,0]]},
+  {d:[-1,0,0],n:[-1,0,0],c:[[0,0,0],[0,1,0],[0,1,1],[0,0,1]]},
+  {d:[0,1,0],n:[0,1,0],c:[[0,1,1],[0,1,0],[1,1,0],[1,1,1]]},
+  {d:[0,-1,0],n:[0,-1,0],c:[[0,0,0],[0,0,1],[1,0,1],[1,0,0]]},
+  {d:[0,0,1],n:[0,0,1],c:[[0,0,1],[0,1,1],[1,1,1],[1,0,1]]},
+  {d:[0,0,-1],n:[0,0,-1],c:[[1,0,0],[1,1,0],[0,1,0],[0,0,0]]},
+];
+const EPS=0.5/(TILES_PER_ROW*TILE);
+function tileUV(i){ const col=i%TILES_PER_ROW,row=(i/TILES_PER_ROW)|0,t=1/TILES_PER_ROW;
+  return {u0:col*t+EPS,v0:1-(row+1)*t+EPS,u1:(col+1)*t-EPS,v1:1-row*t-EPS}; }
+function buildChunkGeometry(c){
+  const sx=c.cx*CHUNK_SIZE,sz=c.cz*CHUNK_SIZE, op={pos:[],norm:[],uv:[],idx:[]}, tr={pos:[],norm:[],uv:[],idx:[]};
+  function addFace(t,wx,wy,wz,face,ti){ const base=t.pos.length/3, uv=tileUV(ti),
+    uvc=[[uv.u0,uv.v0],[uv.u0,uv.v1],[uv.u1,uv.v1],[uv.u1,uv.v0]];
+    for(let i=0;i<4;i++){ const cc=face.c[i]; t.pos.push(wx+cc[0],wy+cc[1],wz+cc[2]); t.norm.push(face.n[0],face.n[1],face.n[2]); t.uv.push(uvc[i][0],uvc[i][1]); }
+    t.idx.push(base,base+1,base+2,base,base+2,base+3); }
+  for(let y=0;y<WORLD_HEIGHT;y++)for(let lz=0;lz<CHUNK_SIZE;lz++)for(let lx=0;lx<CHUNK_SIZE;lx++){
+    const id=c.data[lx+lz*CHUNK_SIZE+y*CHUNK_SIZE*CHUNK_SIZE]; if(id===0)continue;
+    const block=BY_ID[id], wx=sx+lx, wz=sz+lz, st=!!block.transparent;
+    for(let f=0;f<6;f++){ const face=FACES[f], nb=getBlock(wx+face.d[0],y+face.d[1],wz+face.d[2]); let draw;
+      if(!st) draw=isTransparent(nb); else draw=(nb===0)||(isTransparent(nb)&&nb!==id);
+      if(!draw)continue; addFace(st?tr:op,wx,y,wz,face,block.tiles[f]); }
+  }
+  return {op,tr};
+}
+function makeMesh(buf,mat){ if(buf.pos.length===0)return null; const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.Float32BufferAttribute(buf.pos,3));
+  g.setAttribute("normal",new THREE.Float32BufferAttribute(buf.norm,3));
+  g.setAttribute("uv",new THREE.Float32BufferAttribute(buf.uv,2)); g.setIndex(buf.idx);
+  return new THREE.Mesh(g,mat); }
+function rebuildChunk(c){
+  if(c.mesh){ scene.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh=null; }
+  if(c.tmesh){ scene.remove(c.tmesh); c.tmesh.geometry.dispose(); c.tmesh=null; }
+  const {op,tr}=buildChunkGeometry(c); c.mesh=makeMesh(op,solidMat); c.tmesh=makeMesh(tr,transMat);
+  if(c.mesh)scene.add(c.mesh); if(c.tmesh)scene.add(c.tmesh); c.dirty=false; }
+
+/* ============================================================================ THREE SETUP */
+const canvas=document.getElementById("c");
+const renderer=new THREE.WebGLRenderer({canvas,antialias:false});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+renderer.setSize(window.innerWidth,window.innerHeight);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+buildAtlas();
+const solidMat=new THREE.MeshLambertMaterial({map:ATLAS,side:THREE.DoubleSide});
+const transMat=new THREE.MeshLambertMaterial({map:ATLAS,side:THREE.DoubleSide,transparent:true,alphaTest:0.05,depthWrite:false});
+const sun=new THREE.DirectionalLight(0xffffff,0.95); sun.position.set(0.6,1,0.4); scene.add(sun);
+const hemi=new THREE.HemisphereLight(0xbfdfff,0x6b5436,0.65); scene.add(hemi);
+const amb=new THREE.AmbientLight(0xffffff,0.25); scene.add(amb);
+
+// starfield
+let starfield=null;
+(function(){ const g=new THREE.BufferGeometry(),pos=[]; for(let i=0;i<1200;i++){
+  const th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1), r=480;
+  pos.push(r*Math.sin(ph)*Math.cos(th), Math.abs(r*Math.cos(ph)), r*Math.sin(ph)*Math.sin(th)); }
+  g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+  starfield=new THREE.Points(g,new THREE.PointsMaterial({color:0xffffff,size:1.6,fog:false}));
+  starfield.visible=false; scene.add(starfield); })();
+
+// highlight
+const hlEdges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.001,1.001,1.001)),
+  new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:0.4}));
+hlEdges.visible=false; scene.add(hlEdges);
+
+function applyPlanetVisuals(name){
+  const P=PLANETS[name];
+  scene.background=new THREE.Color(P.sky);
+  scene.fog=new THREE.Fog(P.sky,RENDER_DIST*CHUNK_SIZE*0.55,RENDER_DIST*CHUNK_SIZE*0.96);
+  sun.color.set(P.sun); sun.intensity=P.sunI;
+  hemi.color.set(P.hemi[0]); hemi.groundColor.set(P.hemi[1]); hemi.intensity=P.hemi[2];
+  amb.intensity=P.amb; starfield.visible=P.stars;
+}
+
+/* ============================================================================ PLAYER */
+const player={ pos:new THREE.Vector3(8,WORLD_HEIGHT,8), vel:new THREE.Vector3(), onGround:false,
+  fly:false, yaw:0, pitch:0, width:0.6, height:1.8, eye:1.62, health:20, maxHealth:20,
+  hurtCd:0, regenT:0 };
+const keys={}; let pointerLocked=false;
+
+function aabbCollides(px,py,pz){ const hw=player.width/2;
+  const x0=Math.floor(px-hw),x1=Math.floor(px+hw),y0=Math.floor(py),y1=Math.floor(py+player.height-1e-4),z0=Math.floor(pz-hw),z1=Math.floor(pz+hw);
+  for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++)for(let x=x0;x<=x1;x++) if(isSolid(getBlock(x,y,z))) return true; return false; }
+
+function updatePlayer(dt){
+  const P=PLANETS[currentPlanet];
+  const fwd=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  const right=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  const mv=new THREE.Vector3();
+  if(keys.KeyW)mv.add(fwd); if(keys.KeyS)mv.sub(fwd); if(keys.KeyD)mv.add(right); if(keys.KeyA)mv.sub(right);
+  mv.y=0; if(mv.lengthSq()>0)mv.normalize();
+  const creative=gameMode==="creative";
+  if(player.fly){ const sp=12*((keys.ShiftLeft||keys.ShiftRight)?0.5:1);
+    player.vel.x=mv.x*sp; player.vel.z=mv.z*sp; player.vel.y=0;
+    if(keys.Space)player.vel.y=sp; if(keys.ShiftLeft||keys.ShiftRight)player.vel.y=-sp;
+  } else {
+    const sp=(keys.ShiftLeft||keys.ShiftRight)?8.5:5.0;
+    player.vel.x=mv.x*sp; player.vel.z=mv.z*sp; player.vel.y-=P.gravity*dt;
+    if(keys.Space&&player.onGround){ player.vel.y=P.jump; player.onGround=false; }
+  }
+  const p=player.pos; const prevVy=player.vel.y;
+  let nx=p.x+player.vel.x*dt; if(!aabbCollides(nx,p.y,p.z))p.x=nx; else player.vel.x=0;
+  let nz=p.z+player.vel.z*dt; if(!aabbCollides(p.x,p.y,nz))p.z=nz; else player.vel.z=0;
+  let ny=p.y+player.vel.y*dt; let landed=false;
+  if(!aabbCollides(p.x,ny,p.z)){ p.y=ny; player.onGround=false; }
+  else { if(player.vel.y<0){ player.onGround=true; landed=true; } player.vel.y=0; }
+  if(landed&&!player.fly&&!creative&&prevVy<-16){ const dmg=Math.floor((-prevVy-16)/3); if(dmg>0)hurt(dmg); }
+  if(p.y<-25){ if(creative){p.y=WORLD_HEIGHT;player.vel.set(0,0,0);} else { hurt(4); respawn(); } }
+  camera.position.set(p.x,p.y+player.eye,p.z);
+  camera.rotation.order="YXZ"; camera.rotation.y=player.yaw; camera.rotation.x=player.pitch;
+  // regen
+  if(!creative&&player.health<player.maxHealth){ player.regenT+=dt; if(player.regenT>3){ player.regenT=0; player.health++; updateHearts(); } }
+  if(player.hurtCd>0)player.hurtCd-=dt;
+}
+function hurt(d){ if(gameMode==="creative")return; player.health-=d; player.regenT=0; updateHearts();
+  if(player.health<=0){ player.health=player.maxHealth; respawn(); updateHearts(); toast("Вы погибли!"); } }
+function respawn(){ const sx=0,sz=0,sy=surfaceHeight(sx,sz)+1; player.pos.set(sx+0.5,sy,sz+0.5); player.vel.set(0,0,0); }
+
+/* ============================================================================ RAYCAST */
+function raycastVoxel(maxDist){
+  const dir=new THREE.Vector3(); camera.getWorldDirection(dir); const o=camera.position;
+  let x=Math.floor(o.x),y=Math.floor(o.y),z=Math.floor(o.z);
+  const sX=Math.sign(dir.x),sY=Math.sign(dir.y),sZ=Math.sign(dir.z);
+  const dX=dir.x!==0?Math.abs(1/dir.x):Infinity,dY=dir.y!==0?Math.abs(1/dir.y):Infinity,dZ=dir.z!==0?Math.abs(1/dir.z):Infinity;
+  let tX=dir.x!==0?dX*(sX>0?(x+1-o.x):(o.x-x)):Infinity, tY=dir.y!==0?dY*(sY>0?(y+1-o.y):(o.y-y)):Infinity, tZ=dir.z!==0?dZ*(sZ>0?(z+1-o.z):(o.z-z)):Infinity;
+  let nx=0,ny=0,nz=0,t=0;
+  while(t<=maxDist){ const id=getBlock(x,y,z); if(id!==0&&id!==10) return {x,y,z,nx,ny,nz,id};
+    if(tX<tY&&tX<tZ){ x+=sX; t=tX; tX+=dX; nx=-sX;ny=0;nz=0; }
+    else if(tY<tZ){ y+=sY; t=tY; tY+=dY; nx=0;ny=-sY;nz=0; }
+    else { z+=sZ; t=tZ; tZ+=dZ; nx=0;ny=0;nz=-sZ; } }
+  return null;
+}
+
+/* ============================================================================ ROCKETS */
+let rocketModels=[]; let enterableRocket=null;
+function buildRocketModel(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.5,2.2,12),new THREE.MeshLambertMaterial({color:0xdddddd}));
+  body.position.y=1.4; g.add(body);
+  const nose=new THREE.Mesh(new THREE.ConeGeometry(0.45,0.8,12),new THREE.MeshLambertMaterial({color:0xcc3333}));
+  nose.position.y=2.9; g.add(nose);
+  const win=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,10),new THREE.MeshLambertMaterial({color:0x66ccff,emissive:0x113344}));
+  win.position.set(0,1.9,0.42); g.add(win);
+  for(let i=0;i<3;i++){ const fin=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.7,0.45),new THREE.MeshLambertMaterial({color:0xcc3333}));
+    const a=i/3*Math.PI*2; fin.position.set(Math.cos(a)*0.5,0.5,Math.sin(a)*0.5); fin.rotation.y=-a; g.add(fin); }
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,0.2,12),new THREE.MeshLambertMaterial({color:0x888888}));
+  base.position.y=0.1; g.add(base);
+  return g;
+}
+function placeRocket(x,y,z){ getPlanetData(currentPlanet).rockets.push([x,y,z]); spawnRocketModel(x,y,z); toast("Ракета установлена! Подойди и нажми E"); }
+function spawnRocketModel(x,y,z){ const g=buildRocketModel(); g.position.set(x+0.5,y,z+0.5); scene.add(g); rocketModels.push({x,y,z,group:g}); }
+function clearRockets(){ rocketModels.forEach(r=>scene.remove(r.group)); rocketModels=[]; }
+function loadRocketsForPlanet(){ clearRockets(); getPlanetData(currentPlanet).rockets.forEach(r=>spawnRocketModel(r[0],r[1],r[2])); }
+function checkRocketProximity(){ enterableRocket=null; let best=99;
+  for(const r of rocketModels){ const dx=player.pos.x-(r.x+0.5),dz=player.pos.z-(r.z+0.5), d=Math.hypot(dx,dz);
+    if(d<1.6&&player.pos.y>r.y-1.5&&player.pos.y<r.y+3.5&&d<best){ best=d; enterableRocket=r; } } }
+
+/* ============================================================================ MOBS */
+const MOB_DEF={
+  pig:{c:0xed9aa0,shape:"quad",h:0.9,hostile:false},
+  cow:{c:0x5b4636,shape:"quad",h:1.0,hostile:false},
+  zombie:{c:0x3f7a45,shape:"biped",h:1.7,hostile:true},
+  alien:{c:0x9be08a,shape:"biped",h:1.5,hostile:false},
+  martian:{c:0xc4502f,shape:"biped",h:1.6,hostile:true},
+  rockling:{c:0x595959,shape:"quad",h:0.8,hostile:false},
+};
+let mobs=[]; let mobSpawnT=0;
+function makeMobModel(type){ const d=MOB_DEF[type], g=new THREE.Group(), mat=new THREE.MeshLambertMaterial({color:d.c});
+  const legs=[];
+  if(d.shape==="quad"){ const bw=0.5,bl=0.9,bh=0.5*d.h+0.2;
+    const body=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bl),mat); body.position.y=0.5+bh/2; g.add(body);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(bw*0.8,bh*0.8,bw*0.8),mat); head.position.set(0,0.5+bh,bl/2); g.add(head);
+    const lp=[[-bw/2+0.1,bl/2-0.15],[bw/2-0.1,bl/2-0.15],[-bw/2+0.1,-bl/2+0.15],[bw/2-0.1,-bl/2+0.15]];
+    for(const[x,z]of lp){ const leg=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.16),mat); leg.position.set(x,0.25,z); leg.geometry.translate(0,0.25,0); leg.position.y=0.5; g.add(leg); legs.push(leg); }
+  } else { const bw=0.5,bh=0.7*d.h;
+    const body=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,0.3),mat); body.position.y=0.5+bh/2; g.add(body);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.45,0.45),new THREE.MeshLambertMaterial({color:d.c}));
+    head.position.y=0.5+bh+0.22; g.add(head);
+    for(const x of[-0.15,0.15]){ const leg=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.5,0.18),mat); leg.geometry.translate(0,-0.25,0); leg.position.set(x,0.5,0); g.add(leg); legs.push(leg); }
+    for(const x of[-bw/2-0.1,bw/2+0.1]){ const arm=new THREE.Mesh(new THREE.BoxGeometry(0.14,bh*0.8,0.14),mat); arm.position.set(x,0.5+bh*0.6,0); g.add(arm); }
+  }
+  g.userData.legs=legs; return g;
+}
+function spawnMob(){ const P=PLANETS[currentPlanet]; const type=P.mobs[(Math.random()*P.mobs.length)|0];
+  const ang=Math.random()*Math.PI*2, dist=12+Math.random()*10;
+  const x=Math.floor(player.pos.x+Math.cos(ang)*dist), z=Math.floor(player.pos.z+Math.sin(ang)*dist);
+  const y=surfaceHeight(x,z)+1; if(y<2)return;
+  const g=makeMobModel(type); g.position.set(x+0.5,y,z+0.5); scene.add(g);
+  mobs.push({type,group:g,pos:new THREE.Vector3(x+0.5,y,z+0.5),vy:0,dir:Math.random()*Math.PI*2,timer:0,onGround:false,phase:Math.random()*6}); }
+function clearMobs(){ mobs.forEach(m=>scene.remove(m.group)); mobs=[]; }
+function mobSolidAt(x,y,z){ return isSolid(getBlock(Math.floor(x),Math.floor(y),Math.floor(z))); }
+function updateMobs(dt,time){
+  const P=PLANETS[currentPlanet];
+  mobSpawnT-=dt; if(mobSpawnT<=0){ mobSpawnT=2; if(mobs.length<MAX_MOBS&&gameStarted&&pointerLocked)spawnMob(); }
+  for(let i=mobs.length-1;i>=0;i--){ const m=mobs[i], d=MOB_DEF[m.type];
+    if(m.pos.distanceTo(player.pos)>46){ scene.remove(m.group); mobs.splice(i,1); continue; }
+    m.timer-=dt; if(m.timer<=0){ m.timer=2+Math.random()*3; m.dir=Math.random()*Math.PI*2; m.idle=Math.random()<0.3; }
+    let hostile=d.hostile, speed=hostile?2.0:1.2;
+    if(hostile){ const dx=player.pos.x-m.pos.x, dz=player.pos.z-m.pos.z; if(Math.hypot(dx,dz)<14){ m.dir=Math.atan2(dz,dx); m.idle=false; } }
+    const moving=!m.idle; const mvx=moving?Math.cos(m.dir)*speed:0, mvz=moving?Math.sin(m.dir)*speed:0;
+    let nx=m.pos.x+mvx*dt, nz=m.pos.z+mvz*dt;
+    if(!mobSolidAt(nx,m.pos.y+0.1,m.pos.z)&&!mobSolidAt(nx,m.pos.y+1,m.pos.z))m.pos.x=nx; else m.dir+=2;
+    if(!mobSolidAt(m.pos.x,m.pos.y+0.1,nz)&&!mobSolidAt(m.pos.x,m.pos.y+1,nz))m.pos.z=nz; else m.dir+=2;
+    m.vy-=P.gravity*dt; let ny=m.pos.y+m.vy*dt;
+    if(mobSolidAt(m.pos.x,ny,m.pos.z)){ if(m.vy<0){ m.pos.y=Math.floor(ny)+1; m.onGround=true; } m.vy=0; }
+    else { m.pos.y=ny; m.onGround=false; }
+    if(m.pos.y<-20){ scene.remove(m.group); mobs.splice(i,1); continue; }
+    m.group.position.copy(m.pos); m.group.rotation.y=-m.dir+Math.PI/2;
+    const sw=moving?Math.sin(time*7+m.phase)*0.5:0; const legs=m.group.userData.legs;
+    if(legs){ for(let l=0;l<legs.length;l++) legs[l].rotation.x=sw*(l%2===0?1:-1); }
+    if(hostile&&player.hurtCd<=0&&m.pos.distanceTo(player.pos)<1.3){ hurt(2); player.hurtCd=1.0; }
+  }
+}
+
+/* ============================================================================ ITEM ICONS */
+function drawItemIcon(ctx,id,size){
+  ctx.clearRect(0,0,size,size); ctx.imageSmoothingEnabled=false;
+  if(BLOCK[id]){ const ti=BLOCK[id].tiles[0], col=ti%TILES_PER_ROW,row=(ti/TILES_PER_ROW)|0;
+    ctx.drawImage(ATLAS.image,col*TILE,row*TILE,TILE,TILE,0,0,size,size); return; }
+  const u=size/16;
+  if(id==="stick"){ ctx.fillStyle="#7a5a2a"; ctx.fillRect(7*u,2*u,2*u,12*u); }
+  else if(id==="metal_plate"){ ctx.fillStyle="#b8b8c0"; ctx.fillRect(2*u,4*u,12*u,8*u); ctx.fillStyle="#7a7a86"; ctx.fillRect(3*u,5*u,2*u,2*u); ctx.fillRect(11*u,5*u,2*u,2*u); ctx.fillRect(3*u,9*u,2*u,2*u); ctx.fillRect(11*u,9*u,2*u,2*u); }
+  else if(id==="engine"){ ctx.fillStyle="#444"; ctx.fillRect(3*u,3*u,10*u,10*u); ctx.fillStyle="#ff8a2a"; ctx.fillRect(6*u,6*u,4*u,4*u); }
+  else if(id==="fuel"){ ctx.fillStyle="#c0392b"; ctx.fillRect(4*u,3*u,8*u,11*u); ctx.fillStyle="#222"; ctx.fillRect(6*u,1*u,4*u,2*u); ctx.fillStyle="#ffcc33"; ctx.fillRect(6*u,7*u,4*u,3*u); }
+  else if(id==="rocket"){ ctx.fillStyle="#dddddd"; ctx.fillRect(6*u,4*u,4*u,9*u); ctx.fillStyle="#cc3333"; ctx.beginPath(); ctx.moveTo(6*u,4*u); ctx.lineTo(8*u,1*u); ctx.lineTo(10*u,4*u); ctx.fill(); ctx.fillStyle="#cc3333"; ctx.fillRect(4*u,11*u,2*u,3*u); ctx.fillRect(10*u,11*u,2*u,3*u); ctx.fillStyle="#66ccff"; ctx.fillRect(7*u,6*u,2*u,2*u); }
+  else { ctx.fillStyle="#888"; ctx.fillRect(2*u,2*u,12*u,12*u); }
+}
+
+/* ============================================================================ INVENTORY / HOTBAR */
+const CREATIVE_PALETTE=["grass","dirt","stone","cobble","planks","glass","crafting_table","log","rocket"];
+let selected=0;
+function addItem(id,n){ inventory[id]=(inventory[id]||0)+n; buildHotbar(); }
+function removeItem(id,n){ if(!inventory[id])return; inventory[id]-=n; if(inventory[id]<=0)delete inventory[id]; buildHotbar(); }
+function hotbarItems(){ if(gameMode==="creative")return CREATIVE_PALETTE; return Object.keys(inventory).slice(0,9); }
+function selectedItem(){ const h=hotbarItems(); return h[selected]||null; }
+const hotbarEl=document.getElementById("hotbar");
+function buildHotbar(){ const items=hotbarItems(); if(selected>=items.length)selected=Math.max(0,items.length-1);
+  hotbarEl.innerHTML="";
+  for(let i=0;i<9;i++){ const slot=document.createElement("div"); slot.className="slot"+(i===selected?" active":"");
+    const id=items[i];
+    if(id){ const cv=document.createElement("canvas"); cv.width=cv.height=32; drawItemIcon(cv.getContext("2d"),id,32); slot.appendChild(cv);
+      const name=document.createElement("span"); name.className="name"; name.textContent=itemName(id); slot.appendChild(name);
+      if(gameMode!=="creative"){ const cnt=document.createElement("span"); cnt.className="cnt"; cnt.textContent=inventory[id]; slot.appendChild(cnt); } }
+    const num=document.createElement("span"); num.className="num"; num.textContent=(i+1); slot.appendChild(num);
+    hotbarEl.appendChild(slot); }
+}
+const heartsEl=document.getElementById("hearts");
+function updateHearts(){ if(gameMode==="creative"){ heartsEl.style.display="none"; return; }
+  heartsEl.style.display="flex"; heartsEl.innerHTML="";
+  const full=Math.ceil(player.health/2), total=player.maxHealth/2;
+  for(let i=0;i<total;i++){ const cv=document.createElement("canvas"); cv.width=cv.height=16; cv.className="heart";
+    const x=cv.getContext("2d"); x.fillStyle=i<full?"#e23a3a":"#3a1414";
+    x.fillRect(3,4,4,4); x.fillRect(9,4,4,4); x.fillRect(2,6,12,4); x.fillRect(4,10,8,3); x.fillRect(6,13,4,2);
+    heartsEl.appendChild(cv); } }
+
+/* ============================================================================ CRAFTING UI */
+const recipeList=document.getElementById("recipeList");
+function canAfford(r){ if(gameMode==="creative")return true; for(const k in r.in) if((inventory[k]||0)<r.in[k])return false; return true; }
+function doCraft(r){ if(!canAfford(r))return; if(gameMode!=="creative")for(const k in r.in)removeItem(k,r.in[k]); addItem(r.out[0],r.out[1]); buildCraftUI(); toast("Создано: "+itemName(r.out[0])+" ×"+r.out[1]); }
+function buildCraftUI(){ recipeList.innerHTML="";
+  RECIPES.forEach(r=>{ const row=document.createElement("div"); row.className="recipe";
+    const cv=document.createElement("canvas"); cv.width=cv.height=40; drawItemIcon(cv.getContext("2d"),r.out[0],40); row.appendChild(cv);
+    const desc=document.createElement("div"); desc.className="desc";
+    let ings=""; for(const k in r.in){ const have=gameMode==="creative"?"∞":(inventory[k]||0); const ok=gameMode==="creative"||have>=r.in[k];
+      ings+=`<span class="ing ${ok?'ok':'no'}">${itemName(k)} ${have}/${r.in[k]}</span>`; }
+    desc.innerHTML=`<b>${itemName(r.out[0])} ×${r.out[1]}</b><br>${ings}`; row.appendChild(desc);
+    const btn=document.createElement("button"); btn.className="btn"; btn.textContent="Создать"; btn.disabled=!canAfford(r);
+    btn.onclick=()=>doCraft(r); row.appendChild(btn); recipeList.appendChild(row); });
+}
+
+/* ============================================================================ UI MANAGEMENT */
+const $=id=>document.getElementById(id);
+const overlayEl=$("overlay"), menuEl=$("menu"), pauseEl=$("pause"), craftEl=$("craftui"), planetEl=$("planetui");
+let gameStarted=false, modalOpen=false, flying=false;
+function show(el){ el.classList.add("show"); } function hide(el){ el.classList.remove("show"); }
+function hideAllPanels(){ [overlayEl,menuEl,pauseEl,craftEl,planetEl].forEach(hide); }
+function setHud(on){ document.getElementById("crosshair").style.display=on?"block":"none";
+  hotbarEl.style.display=on?"flex":"none"; $("info").style.display=on?"block":"none";
+  if(on)updateHearts(); else heartsEl.style.display="none"; }
+let toastT=0;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.style.display="block"; toastT=2.5; }
+
+function openCraft(){ modalOpen=true; buildCraftUI(); hideAllPanels(); show(craftEl); document.exitPointerLock(); }
+function closeCraft(){ modalOpen=false; hide(craftEl); show(overlayEl); }
+function openPlanetMenu(){ modalOpen=true; buildPlanetMenu(); hideAllPanels(); show(planetEl); document.exitPointerLock(); }
+function closePlanetMenu(){ modalOpen=false; hide(planetEl); show(overlayEl); }
+
+function buildPlanetMenu(){ const grid=$("planetGrid"); grid.innerHTML="";
+  for(const name in PLANETS){ if(name===currentPlanet)continue;
+    const card=document.createElement("div"); card.className="planetcard";
+    card.innerHTML=`<div class="dot" style="background:${PLANET_COLOR[name]}"></div><div class="pn">${PLANETS[name].name}</div><div class="pd">${PLANET_DESC[name]}</div>`;
+    card.onclick=()=>{ closePlanetMenu(); flyTo(name); }; grid.appendChild(card); }
+}
+
+/* ============================================================================ FLIGHT ANIMATION */
+const flightCanvas=$("flightCanvas"), flightText=$("flightText");
+function flyTo(target){
+  flying=true; hideAllPanels(); setHud(false); document.exitPointerLock();
+  flightCanvas.style.display="block"; flightText.style.display="block";
+  flightText.textContent="Полёт на: "+PLANETS[target].name;
+  flightCanvas.width=window.innerWidth; flightCanvas.height=window.innerHeight;
+  const fx=flightCanvas.getContext("2d");
+  const W=flightCanvas.width,H=flightCanvas.height;
+  const stars=[]; for(let i=0;i<160;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*2+0.5,v:200+Math.random()*500});
+  let elapsed=0; const DUR=3.4; let last=performance.now();
+  function frame(){ const now=performance.now(); const dt=(now-last)/1000; last=now; elapsed+=dt;
+    fx.fillStyle="#000"; fx.fillRect(0,0,W,H);
+    fx.fillStyle="#fff"; for(const s of stars){ s.y+=s.v*dt; if(s.y>H){s.y=0;s.x=Math.random()*W;} fx.fillRect(s.x,s.y,s.s,s.s*3); }
+    // rocket
+    const rx=W/2, ry=H*0.6 - Math.sin(elapsed*2)*4;
+    fx.save(); fx.translate(rx,ry);
+    fx.fillStyle="#ddd"; fx.fillRect(-14,-40,28,60);
+    fx.fillStyle="#c33"; fx.beginPath(); fx.moveTo(-14,-40); fx.lineTo(0,-70); fx.lineTo(14,-40); fx.fill();
+    fx.fillStyle="#c33"; fx.fillRect(-26,5,12,22); fx.fillRect(14,5,12,22);
+    fx.fillStyle="#6cf"; fx.beginPath(); fx.arc(0,-20,7,0,7); fx.fill();
+    const fl=20+Math.random()*30; fx.fillStyle="#ff9b2a"; fx.beginPath(); fx.moveTo(-12,20); fx.lineTo(0,20+fl); fx.lineTo(12,20); fx.fill();
+    fx.fillStyle="#ffe066"; fx.beginPath(); fx.moveTo(-6,20); fx.lineTo(0,20+fl*0.6); fx.lineTo(6,20); fx.fill();
+    fx.restore();
+    if(elapsed<DUR){ requestAnimationFrame(frame); }
+    else { flightCanvas.style.display="none"; flightText.style.display="none"; flying=false; arriveAt(target); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================================ PLANET SWITCH */
+function disposeWorld(){ chunks.forEach(c=>{ if(c.mesh){scene.remove(c.mesh);c.mesh.geometry.dispose();} if(c.tmesh){scene.remove(c.tmesh);c.tmesh.geometry.dispose();} });
+  chunks=new Map(); buildQueue.length=0; clearMobs(); clearRockets(); }
+function arriveAt(target){
+  disposeWorld(); currentPlanet=target; getPlanetData(target); applyPlanetVisuals(target);
+  // spawn
+  const sx=0,sz=0; const sy=surfaceHeight(sx,sz)+1; player.pos.set(sx+0.5,sy,sz+0.5); player.vel.set(0,0,0); player.fly=false;
+  // ensure a rocket to leave again
+  const rk=getPlanetData(target).rockets;
+  let near=rk.some(r=>Math.hypot(r[0]-sx,r[2]-sz)<6);
+  if(!near){ const rx=sx+2, rz=sz; const ry=surfaceHeight(rx,rz)+1; placeRocketSilently(rx,ry-1,rz); }
+  loadRocketsForPlanet(); mobs=[]; mobSpawnT=0;
+  setHud(true); show(overlayEl);
+  toast("Прибытие: "+PLANETS[target].name);
+}
+function placeRocketSilently(x,y,z){ getPlanetData(currentPlanet).rockets.push([x,y,z]); }
+
+/* ============================================================================ INPUT */
+overlayEl.addEventListener("click",()=>{ if(gameStarted&&!modalOpen&&!flying)canvas.requestPointerLock(); });
+document.addEventListener("pointerlockchange",()=>{ pointerLocked=(document.pointerLockElement===canvas);
+  if(pointerLocked){ hide(overlayEl); hide(pauseEl); }
+  else if(gameStarted&&!modalOpen&&!flying){ show(pauseEl); } });
+document.addEventListener("mousemove",e=>{ if(!pointerLocked)return; const s=0.0022;
+  player.yaw-=e.movementX*s; player.pitch-=e.movementY*s; const l=Math.PI/2-0.01; player.pitch=Math.max(-l,Math.min(l,player.pitch)); });
+document.addEventListener("keydown",e=>{ keys[e.code]=true;
+  if(!gameStarted)return;
+  if(e.code==="KeyF"){ if(gameMode==="creative"||true)player.fly=!player.fly; }
+  if(e.code.startsWith("Digit")){ const n=parseInt(e.code.slice(5),10); if(n>=1&&n<=9){ selected=n-1; buildHotbar(); } }
+  if(e.code==="Space")e.preventDefault();
+  if(e.code==="KeyC"&&pointerLocked)openCraft();
+  if(e.code==="KeyE"&&pointerLocked){ if(enterableRocket)openPlanetMenu();
+    else { const hit=raycastVoxel(REACH); if(hit&&getBlock(hit.x,hit.y,hit.z)===BLOCK.crafting_table.id)openCraft(); } }
+});
+document.addEventListener("keyup",e=>{ keys[e.code]=false; });
+window.addEventListener("wheel",e=>{ if(!pointerLocked)return; const n=hotbarItems().length||1; selected=(selected+(e.deltaY>0?1:-1)+n)%n; buildHotbar(); });
+
+canvas.addEventListener("mousedown",e=>{ if(!pointerLocked)return; const hit=raycastVoxel(REACH); if(!hit)return;
+  if(e.button===0){ // break
+    const id=hit.id; if(id===BLOCK.bedrock.id)return;
+    if(gameMode!=="creative"){ const drop=dropFor(id); if(drop)addItem(drop,1); }
+    rebuildAround(hit.x,hit.y,hit.z,()=>setBlock(hit.x,hit.y,hit.z,0));
+  } else if(e.button===2){ // place / open table
+    if(getBlock(hit.x,hit.y,hit.z)===BLOCK.crafting_table.id){ openCraft(); return; }
+    const sel=selectedItem(); if(!sel)return;
+    const px=hit.x+hit.nx, py=hit.y+hit.ny, pz=hit.z+hit.nz; if(py<0||py>=WORLD_HEIGHT)return;
+    if(sel==="rocket"){ const baseY=py; placeRocket(px,baseY,pz); if(gameMode!=="creative")removeItem("rocket",1); return; }
+    if(!BLOCK[sel])return;
+    const hw=player.width/2;
+    const inside=(player.pos.x+hw>px&&player.pos.x-hw<px+1&&player.pos.y+player.height>py&&player.pos.y<py+1&&player.pos.z+hw>pz&&player.pos.z-hw<pz+1);
+    if(inside)return; const cur=getBlock(px,py,pz); if(cur!==0&&cur!==10)return;
+    rebuildAround(px,py,pz,()=>setBlock(px,py,pz,BLOCK[sel].id));
+    if(gameMode!=="creative")removeItem(sel,1);
+  }
+});
+canvas.addEventListener("contextmenu",e=>e.preventDefault());
+function dropFor(id){ const b=BY_ID[id]; if(!b)return null; const k=b.key;
+  if(k==="grass")return "dirt"; if(k==="stone")return "cobble"; if(k==="leaves")return Math.random()<0.5?null:"stick";
+  if(k==="water"||k==="bedrock")return null; return k; }
+function rebuildAround(x,y,z,mutate){ mutate();
+  const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE), set=new Set([ckey(cx,cz)]);
+  const lx=x-cx*CHUNK_SIZE,lz=z-cz*CHUNK_SIZE;
+  if(lx===0)set.add(ckey(cx-1,cz)); if(lx===CHUNK_SIZE-1)set.add(ckey(cx+1,cz));
+  if(lz===0)set.add(ckey(cx,cz-1)); if(lz===CHUNK_SIZE-1)set.add(ckey(cx,cz+1));
+  set.forEach(k=>{ const c=chunks.get(k); if(c)rebuildChunk(c); }); }
+
+/* ============================================================================ CHUNK STREAMING */
+const buildQueue=[];
+function updateChunks(){ const pcx=Math.floor(player.pos.x/CHUNK_SIZE),pcz=Math.floor(player.pos.z/CHUNK_SIZE);
+  const need=[]; for(let dz=-RENDER_DIST;dz<=RENDER_DIST;dz++)for(let dx=-RENDER_DIST;dx<=RENDER_DIST;dx++){
+    if(dx*dx+dz*dz>RENDER_DIST*RENDER_DIST)continue; need.push([pcx+dx,pcz+dz,dx*dx+dz*dz]); }
+  need.sort((a,b)=>a[2]-b[2]);
+  for(const[cx,cz]of need){ const c=getChunk(cx,cz); if(c.dirty&&!buildQueue.includes(c))buildQueue.push(c); }
+  const maxD=RENDER_DIST+2;
+  chunks.forEach((c,k)=>{ if(Math.abs(c.cx-pcx)>maxD||Math.abs(c.cz-pcz)>maxD){
+    if(c.mesh){scene.remove(c.mesh);c.mesh.geometry.dispose();} if(c.tmesh){scene.remove(c.tmesh);c.tmesh.geometry.dispose();} chunks.delete(k); } });
+}
+function processBuildQueue(ms){ const s=performance.now(); while(buildQueue.length&&performance.now()-s<ms){ const c=buildQueue.shift(); if(c.dirty)rebuildChunk(c); } }
+
+/* ============================================================================ MAIN LOOP */
+const infoEl=$("info"); const loadingEl=$("loading"); const promptEl=$("prompt");
+let last=performance.now(), fpsAcc=0,fpsC=0,fps=0;
+function animate(){ requestAnimationFrame(animate); const now=performance.now(); let dt=(now-last)/1000; last=now; if(dt>0.1)dt=0.1; const time=now/1000;
+  if(starfield)starfield.position.set(player.pos.x,0,player.pos.z);
+  if(gameStarted&&!flying){
+    if(pointerLocked)updatePlayer(dt);
+    else { camera.position.set(player.pos.x,player.pos.y+player.eye,player.pos.z); camera.rotation.order="YXZ"; camera.rotation.y=player.yaw; camera.rotation.x=player.pitch; }
+    updateChunks(); processBuildQueue(6); updateMobs(dt,time); checkRocketProximity();
+    const hit=raycastVoxel(REACH);
+    if(hit){ hlEdges.visible=true; hlEdges.position.set(hit.x+0.5,hit.y+0.5,hit.z+0.5); } else hlEdges.visible=false;
+    if(enterableRocket&&pointerLocked){ promptEl.style.display="block"; promptEl.textContent="Нажми E — выбрать планету 🚀"; }
+    else if(pointerLocked){ const h2=raycastVoxel(REACH); if(h2&&getBlock(h2.x,h2.y,h2.z)===BLOCK.crafting_table.id){ promptEl.style.display="block"; promptEl.textContent="Нажми E или ПКМ — верстак"; } else promptEl.style.display="none"; }
+    else promptEl.style.display="none";
+    infoEl.innerHTML=`FPS: ${fps}<br>Планета: ${PLANETS[currentPlanet].name}<br>XYZ: ${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}<br>Режим: ${gameMode==="creative"?"Креатив":"Выживание"}${player.fly?" / Полёт":""}<br>В руке: ${selectedItem()?itemName(selectedItem()):"—"}`;
+    loadingEl.textContent=buildQueue.length?`строю чанки: ${buildQueue.length}`:"";
+    if(toastT>0){ toastT-=dt; if(toastT<=0)$("toast").style.display="none"; }
+    autoSaveT-=dt; if(autoSaveT<=0){ autoSaveT=15; if(worldName)saveWorld(); }
+  }
+  renderer.render(scene,camera);
+  fpsAcc+=dt; fpsC++; if(fpsAcc>0.5){ fps=Math.round(fpsC/fpsAcc); fpsAcc=0; fpsC=0; }
+}
+let autoSaveT=15;
+animate();
+window.addEventListener("resize",()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
+
+/* ============================================================================ SAVE / LOAD */
+function hashSeed(str){ if(!str||!str.trim())return (Math.random()*1e9)|0; const t=str.trim(); if(/^\d+$/.test(t))return parseInt(t,10)>>>0;
+  let h=0; for(let i=0;i<t.length;i++)h=(Math.imul(h,31)+t.charCodeAt(i))|0; return h>>>0; }
+function worldKey(name){ return "mc_world_"+name; }
+function listWorlds(){ try{ return JSON.parse(localStorage.getItem("mc_worlds")||"[]"); }catch(e){ return []; } }
+function setWorldList(arr){ localStorage.setItem("mc_worlds",JSON.stringify(arr)); }
+function saveWorld(){ if(!worldName)return;
+  const planets={}; for(const n in planetStore){ const pd=planetStore[n];
+    planets[n]={ edits:[...pd.edits.entries()], rockets:pd.rockets }; }
+  const data={ name:worldName, seed:baseSeed, mode:gameMode, planet:currentPlanet,
+    player:{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,pitch:player.pitch,health:player.health},
+    inventory, planets, savedAt:Date.now() };
+  try{ localStorage.setItem(worldKey(worldName),JSON.stringify(data));
+    const l=listWorlds(); if(!l.includes(worldName)){ l.push(worldName); setWorldList(l); } }catch(e){ toast("Ошибка сохранения"); }
+}
+function deleteWorld(name){ localStorage.removeItem(worldKey(name)); setWorldList(listWorlds().filter(n=>n!==name)); refreshWorldList(); }
+
+function startNewWorld(name,seedStr,mode){
+  worldName=name||"Мир"; baseSeed=hashSeed(seedStr); gameMode=mode; currentPlanet="earth";
+  for(const k in planetStore)delete planetStore[k];
+  inventory={}; if(mode==="survival"){ inventory={planks:8, log:4, stone:6, sand:4, gravel:4}; }
+  player.health=20; player.fly=(mode==="creative");
+  beginGame();
+}
+function loadWorldByName(name){ let data; try{ data=JSON.parse(localStorage.getItem(worldKey(name))); }catch(e){} if(!data){ toast("Не удалось загрузить"); return; }
+  worldName=data.name; baseSeed=data.seed; gameMode=data.mode; currentPlanet=data.planet||"earth";
+  for(const k in planetStore)delete planetStore[k];
+  for(const n in (data.planets||{})){ const pd=getPlanetData(n); pd.edits=new Map(data.planets[n].edits||[]); pd.rockets=data.planets[n].rockets||[]; }
+  inventory=data.inventory||{};
+  player.pos.set(data.player.x,data.player.y,data.player.z); player.yaw=data.player.yaw; player.pitch=data.player.pitch;
+  player.health=data.player.health||20; player.fly=(gameMode==="creative");
+  beginGame(true);
+}
+function beginGame(freshSpawn){
+  gameStarted=true; hideAllPanels(); applyPlanetVisuals(currentPlanet); disposeWorld();
+  getPlanetData(currentPlanet);
+  if(freshSpawn!==true){ const sy=surfaceHeight(0,0)+2; player.pos.set(0.5,sy,0.5); }
+  loadRocketsForPlanet(); buildHotbar(); setHud(true); updateHearts();
+  show(overlayEl); // click to play
+}
+
+/* main menu wiring */
+function refreshWorldList(){ const el=$("worldList"); const worlds=listWorlds(); el.innerHTML="";
+  if(worlds.length===0){ el.innerHTML='<div class="sub">Нет сохранённых миров</div>'; return; }
+  worlds.forEach(name=>{ let meta={}; try{ meta=JSON.parse(localStorage.getItem(worldKey(name)))||{}; }catch(e){}
+    const row=document.createElement("div"); row.className="worldrow";
+    row.innerHTML=`<div class="meta"><b>${name}</b><br>сид ${meta.seed||"?"} · ${meta.mode==="creative"?"креатив":"выживание"} · ${PLANETS[meta.planet||"earth"].name}</div>`;
+    const wrap=document.createElement("div");
+    const lb=document.createElement("button"); lb.className="btn"; lb.textContent="Играть"; lb.onclick=()=>loadWorldByName(name);
+    const db=document.createElement("button"); db.className="btn red"; db.textContent="✕"; db.onclick=()=>{ if(confirm("Удалить мир "+name+"?"))deleteWorld(name); };
+    wrap.appendChild(lb); wrap.appendChild(db); row.appendChild(wrap); el.appendChild(row); });
+}
+$("mCreate").onclick=()=>{ const name=$("mName").value.trim()||"Мир"; startNewWorld(name,$("mSeed").value,$("mMode").value); };
+$("craftClose").onclick=closeCraft;
+$("planetClose").onclick=closePlanetMenu;
+$("pResume").onclick=()=>{ hide(pauseEl); show(overlayEl); };
+$("pSave").onclick=()=>{ saveWorld(); toast("Мир сохранён"); };
+$("pQuit").onclick=()=>{ saveWorld(); gameStarted=false; disposeWorld(); setHud(false); hideAllPanels(); refreshWorldList(); show(menuEl); };
+window.addEventListener("beforeunload",()=>{ if(gameStarted)saveWorld(); });
+
+refreshWorldList();
+</script>
+</body>
+</html>
