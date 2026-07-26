@@ -1,0 +1,12 @@
+{
+  "name": "neon-labyrinth",
+  "version": "1.0.0",
+  "description": "NEON LABYRINTH — 3D-мультиплеер-шутер от первого лица в лабиринте: 5 бойцов, свободные слоты занимают боты",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  }
+}
