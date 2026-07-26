@@ -1,0 +1,12 @@
+{
+  "name": "snake3d-online",
+  "version": "1.0.0",
+  "description": "SNAKE.IO 3D — мультиплеер: 5-минутные соревновательные матчи, скины за победы",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  }
+}
