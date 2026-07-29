@@ -38,7 +38,7 @@ sudo docker run -d --name shooter --restart unless-stopped \
 
 ```bash
 sudo docker run -d --name durak --restart unless-stopped \
-  -p 127.0.0.1:8082:8080 \
+  -p 127.0.0.1:8082:8080 -e PORT=8080 \
   -v /home/mmm/js/durak:/app -w /app \
   node:20-alpine sh -c "npm install --omit=dev && exec node server.js"
 ```
