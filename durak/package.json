@@ -1,0 +1,14 @@
+{
+  "name": "mmatvei-durak",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сетевая игра в подкидного дурака для телевизора, телефонов и планшетов",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  }
+}

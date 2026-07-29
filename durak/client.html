@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#123b2a">
+<title>Дурак — mmatvei.ru</title>
+<style>
+:root{--felt:#164b34;--felt2:#0c3222;--cream:#fff8df;--ink:#171813;--gold:#f4c95d;--red:#d62d3c;--blue:#8fe3ff}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--felt2);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#fff}
+body{min-height:100dvh;background:radial-gradient(circle at 50% 40%,#236344,var(--felt2) 72%);overscroll-behavior:none}
+button,input{font:inherit}.hidden{display:none!important}
+#join{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;background:radial-gradient(circle,#286b4a,#092419)}
+.joinbox{width:min(520px,100%);text-align:center}.joinbox h1{font-size:clamp(52px,15vw,92px);margin:0;color:var(--gold);text-shadow:0 5px #713d12}
+.joinbox p{font-size:20px;line-height:1.4}.joinbox input{width:100%;font-size:28px;padding:18px;border:4px solid var(--gold);border-radius:18px;text-align:center}
+.bigbtn{width:100%;min-height:72px;margin-top:16px;border:0;border-radius:18px;background:var(--gold);color:#251a08;font-size:26px;font-weight:900;box-shadow:0 6px #9d681c}
+.bigbtn:active{transform:translateY(4px);box-shadow:0 2px #9d681c}.bigbtn.secondary{background:#dceee6;box-shadow:0 6px #789b8b}
+#app{min-height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;background:#071d15bb;border-bottom:2px solid #ffffff18}
+.logo{font-weight:1000;font-size:26px;color:var(--gold)}#status{font-size:18px;text-align:right}.online{color:#8cffb5}
+#lobby{flex:1;display:grid;place-items:center;padding:20px}.panel{width:min(700px,100%);padding:24px;border:3px solid #ffffff22;border-radius:24px;background:#09261dcc;box-shadow:0 15px 50px #0006}
+.panel h2{text-align:center;font-size:34px;margin:0 0 10px}.hint{text-align:center;font-size:20px;color:#cfe9dc}
+.people{display:grid;gap:10px;margin:22px 0}.person{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-radius:14px;background:#ffffff12;font-size:24px}.ready{color:#8cffb5;font-weight:800}.wait{color:#ffe19a}
+#readyBtn.on{background:#ff9c89;box-shadow:0 6px #9b3b2b}
+#game{flex:1;display:flex;flex-direction:column;min-height:0}.players{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:12px}
+.badge{min-width:135px;padding:10px 14px;border:2px solid #ffffff25;border-radius:14px;background:#09261dd9;text-align:center;font-size:18px}
+.badge strong{display:block;font-size:22px}.badge.turn{border-color:var(--gold);box-shadow:0 0 18px #f4c95d88}.badge.defender{border-color:var(--blue);box-shadow:0 0 18px #8fe3ff66}.badge.out{opacity:.5}
+.board{position:relative;flex:1;min-height:270px;display:flex;align-items:center;justify-content:center;padding:22px}
+.deckinfo{position:absolute;left:18px;top:16px;font-size:22px;font-weight:800}.trump{color:var(--gold)}
+#table{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center}.pair{position:relative;width:112px;height:160px}.pair .card:first-child{position:absolute;left:0;top:0}.pair .card:nth-child(2){position:absolute;left:30px;top:32px;transform:rotate(8deg)}
+.card{width:88px;height:126px;flex:0 0 auto;border:3px solid #d8d1b8;border-radius:12px;background:var(--cream);color:var(--ink);box-shadow:0 5px 10px #0007;display:flex;flex-direction:column;justify-content:space-between;padding:7px;font-weight:1000;font-size:26px;line-height:.9;transition:.12s}
+.card.red{color:var(--red)}button.card{cursor:pointer}.card.selected{transform:translateY(-20px);outline:5px solid var(--gold)}.card.playable{border-color:var(--gold);box-shadow:0 0 18px #ffd45c}.card.target{outline:5px solid var(--blue);cursor:pointer}
+.pip{text-align:right;font-size:36px}.back{background:repeating-linear-gradient(45deg,#173759 0 8px,#f0d88b 8px 12px);border-color:#fff}
+.message{text-align:center;min-height:52px;padding:8px 14px;font-size:clamp(22px,4vw,34px);font-weight:900;color:#fff4be}
+.controls{background:#071d15ee;border-top:2px solid #ffffff18;padding:12px 14px max(12px,env(safe-area-inset-bottom))}
+.handtitle{display:flex;justify-content:space-between;font-size:20px;margin-bottom:8px}.hand{display:flex;gap:8px;overflow-x:auto;padding:22px 5px 10px;min-height:165px;scrollbar-color:var(--gold) transparent}
+.actions{display:flex;gap:10px;max-width:700px;margin:8px auto 0}.actions button{min-height:58px;margin:0;font-size:22px}.danger{background:#ff9c89!important}
+#finished{position:fixed;inset:0;z-index:15;display:grid;place-items:center;text-align:center;background:#071d15ee;padding:20px}#finished h2{font-size:clamp(40px,10vw,80px);color:var(--gold)}
+.tv .controls{display:none}.tv .board{min-height:430px}.tv .card{width:120px;height:168px;font-size:34px}.tv .pip{font-size:48px}.tv .pair{width:155px;height:215px}.tv .message{font-size:42px}
+.tv header{padding:18px 28px}.tv .badge{min-width:190px;font-size:24px}.tv .badge strong{font-size:30px}
+@media(max-width:600px){header{padding:8px 12px}.logo{font-size:21px}#status{font-size:14px}.badge{min-width:100px;padding:7px;font-size:14px}.badge strong{font-size:18px}.players{gap:6px;padding:7px}.board{padding:10px}.pair{width:93px;height:142px}.card{width:76px;height:110px;font-size:23px}.pip{font-size:31px}.pair .card:nth-child(2){left:22px;top:28px}.deckinfo{font-size:16px}.message{font-size:22px}.panel{padding:18px}.person{font-size:20px}}
+</style>
+</head>
+<body>
+<section id="join">
+  <div class="joinbox">
+    <h1>ДУРАК</h1>
+    <p>Карты будут здесь — телевизор только помогает всем следить за столом.</p>
+    <input id="name" maxlength="18" autocomplete="name" placeholder="Ваше имя">
+    <button class="bigbtn" id="joinBtn">Войти в игру</button>
+    <button class="bigbtn secondary" id="tvBtn">📺 Это телевизор</button>
+    <p id="error"></p>
+  </div>
+</section>
+<main id="app" class="hidden">
+  <header><div class="logo">♠ ДУРАК</div><div id="status">Подключение…</div></header>
+  <section id="lobby">
+    <div class="panel">
+      <h2>Собираем игроков</h2>
+      <div class="hint">Партия начнётся сама, когда готовы все.<br>Нужно хотя бы двое.</div>
+      <div class="people" id="people"></div>
+      <button class="bigbtn" id="readyBtn">Я ГОТОВ</button>
+      <div class="hint" id="lobbyHint"></div>
+    </div>
+  </section>
+  <section id="game" class="hidden">
+    <div class="players" id="players"></div>
+    <div class="board">
+      <div class="deckinfo"><span id="deck"></span><br><span class="trump" id="trump"></span></div>
+      <div id="table"></div>
+    </div>
+    <div class="message" id="message"></div>
+    <div class="controls">
+      <div class="handtitle"><b>Ваши карты</b><span id="handCount"></span></div>
+      <div class="hand" id="hand"></div>
+      <div class="actions"><button class="bigbtn hidden" id="passBtn">БИТО</button><button class="bigbtn danger hidden" id="takeBtn">ЗАБИРАЮ</button></div>
+    </div>
+  </section>
+</main>
+<section id="finished" class="hidden"><div><h2 id="result"></h2><p>Через несколько секунд вернёмся в комнату</p></div></section>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const isTV=new URLSearchParams(location.search).has("tv");
+let ws,state=null,you=null,selected=null,ready=false;
+const savedName=localStorage.getItem("durakName")||"";
+$("#name").value=savedName;
+if(isTV){document.body.classList.add("tv");connect(true)}
+$("#joinBtn").onclick=()=>{const name=$("#name").value.trim();if(!name)return $("#error").textContent="Напишите имя";localStorage.setItem("durakName",name);connect(false,name)};
+$("#tvBtn").onclick=()=>{history.replaceState(null,"","?tv");document.body.classList.add("tv");connect(true)};
+function connect(tv,name){
+  $("#error").textContent="Подключаемся…";
+  const proto=location.protocol==="https:"?"wss":"ws";
+  ws=new WebSocket(`${proto}://${location.host}${location.pathname.replace(/[^/]*$/,"")}`);
+  ws.onopen=()=>ws.send(JSON.stringify(tv?{t:"watch"}:{t:"join",name,token:localStorage.getItem("durakToken")||""}));
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.t==="welcome"){you=m.id;localStorage.setItem("durakToken",m.token)}else if(m.t==="error"){$("#error").textContent=m.message}else if(m.t==="state"){state=m;render()}};
+  ws.onclose=()=>{$("#status").textContent="Нет связи — переподключаемся";setTimeout(()=>connect(tv,name||savedName),1500)};
+}
+$("#readyBtn").onclick=()=>{ready=!ready;send({t:"ready",ready})};
+$("#passBtn").onclick=()=>send({t:"pass"});
+$("#takeBtn").onclick=()=>send({t:"take"});
+function send(m){if(ws?.readyState===1)ws.send(JSON.stringify(m))}
+function pname(id){return state.players.find(p=>p.id===id)?.name||"Игрок"}
+function card(c,opts={}){
+  const el=document.createElement(opts.button?"button":"div");el.className=`card ${(c.color==="red"||"♦♥".includes(c.suit)?"red ":"")}${opts.class||""}`;
+  el.innerHTML=c.joker?`<span>${c.rank}</span><span class="pip">★</span><span>ДЖОКЕР</span>`:`<span>${c.rank}<br>${c.suit}</span><span class="pip">${c.suit}</span>`;
+  if(opts.click)el.onclick=opts.click;return el;
+}
+function render(){
+  $("#join").classList.add("hidden");$("#app").classList.remove("hidden");
+  const online=state.players.filter(p=>p.online).length;$("#status").innerHTML=`<span class="online">●</span> ${online} в сети`;
+  $("#lobby").classList.toggle("hidden",state.phase!=="lobby");$("#game").classList.toggle("hidden",state.phase==="lobby");
+  $("#finished").classList.toggle("hidden",state.phase!=="finished");
+  if(state.phase==="finished")$("#result").textContent=state.result?.text||"Партия окончена";
+  if(state.phase==="lobby"){
+    $("#people").replaceChildren(...state.players.map(p=>{const d=document.createElement("div");d.className="person";d.innerHTML=`<b>${esc(p.name)}</b><span class="${p.ready?"ready":"wait"}">${p.ready?"✓ готов":"ждём"}</span>`;return d}));
+    const me=state.players.find(p=>p.id===you);ready=!!me?.ready;
+    $("#readyBtn").textContent=ready?"НЕ ГОТОВ":"Я ГОТОВ";$("#readyBtn").classList.toggle("on",ready);
+    $("#readyBtn").classList.toggle("hidden",isTV);
+    $("#lobbyHint").textContent=state.players.length<2?"Ждём ещё хотя бы одного игрока":state.players.some(p=>!p.ready)?"Начнём, когда все нажмут «Я готов»":"Начинаем!";
+    return;
+  }
+  renderPlayers();renderTable();renderHand();
+}
+function renderPlayers(){
+  $("#players").replaceChildren(...state.order.map(id=>{const p=state.players.find(x=>x.id===id);const d=document.createElement("div");
+    d.className=`badge ${id===state.attacker?"turn":""} ${id===state.defender?"defender":""} ${p?.out?"out":""}`;
+    const role=id===state.defender?"защищается":id===state.attacker?"ходит":"ждёт";
+    d.innerHTML=`<strong>${esc(p?.name||"?")}${id===you?" (вы)":""}</strong>${p?.out?"вышел":role} · 🂠 ${p?.cards||0}${!p?.online?" · нет связи":""}`;return d}));
+}
+function renderTable(){
+  $("#deck").textContent=`Колода: ${state.deck}`;$("#trump").textContent=`Козырь ${state.trump||"—"}`;
+  const table=$("#table");table.replaceChildren();
+  state.table.forEach((pair,i)=>{const d=document.createElement("div");d.className="pair";d.append(card(pair.attack));
+    if(pair.defense)d.append(card(pair.defense));else if(you===state.defender&&selected){const target=card(selected,{class:canBeat(selected,pair.attack)?"target":"",click:()=>defend(i)});if(canBeat(selected,pair.attack))d.append(target)}
+    table.append(d)});
+  let msg=state.log;
+  if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту и карту на столе":"Вы отбились — ждём остальных";
+  else if(you&&you===state.attacker&&state.table.length===0)msg="Ваш ход — выберите карту";
+  $("#message").textContent=msg;
+}
+function renderHand(){
+  const hand=$("#hand");hand.replaceChildren();$("#handCount").textContent=`${state.hand.length} шт.`;
+  const ranks=new Set(state.table.flatMap(p=>[p.attack.rank,p.defense?.rank]));
+  const attackable=you!==state.defender&&!state.passed.includes(you)&&state.table.length<state.maxAttack;
+  state.hand.forEach(c=>{const playable=attackable&&(state.table.length===0?you===state.attacker:ranks.has(c.rank));
+    const b=card(c,{button:true,class:`${selected?.id===c.id?"selected ":""}${playable?"playable":""}`,click:()=>choose(c,playable)});hand.append(b)});
+  const attacker=you&&you!==state.defender&&state.table.length>0&&!state.passed.includes(you);
+  $("#passBtn").classList.toggle("hidden",!attacker||state.taking&&state.passed.includes(you));
+  $("#takeBtn").classList.toggle("hidden",you!==state.defender||!state.table.length||state.taking);
+}
+function choose(c,playable){
+  if(you===state.defender){selected=selected?.id===c.id?null:c;renderTable();renderHand()}
+  else if(playable)send({t:"attack",card:c.id});
+}
+function defend(i){if(selected&&canBeat(selected,state.table[i].attack)){send({t:"defend",card:selected.id,pair:i});selected=null}}
+function canBeat(c,a){if(c.joker)return true;if(a.joker)return false;if(c.suit===a.suit)return rank(c.rank)>rank(a.rank);return c.suit===state.trump&&a.suit!==state.trump}
+function rank(r){return["2","3","4","5","6","7","8","9","10","В","Д","К","Т"].indexOf(r)}
+function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
+</script>
+</body>
+</html>

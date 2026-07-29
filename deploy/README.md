@@ -33,6 +33,16 @@ sudo docker run -d --name shooter --restart unless-stopped \
   node:20-alpine sh -c "npm install --omit=dev && exec node server.js"
 ```
 
+- **Дурак** (`durak/`) — карточная WebSocket-игра на 2–4 игроков. Телевизор
+  открывает `/durak/?tv`, игроки — `/durak/`. Контейнер слушает порт 8082:
+
+```bash
+sudo docker run -d --name durak --restart unless-stopped \
+  -p 127.0.0.1:8082:8080 \
+  -v /home/mmm/js/durak:/app -w /app \
+  node:20-alpine sh -c "npm install --omit=dev && exec node server.js"
+```
+
 ## Обновление сайта
 
 ```bash
@@ -40,4 +50,5 @@ ssh mmm@mmatvei.ru 'cd ~/js && git pull'
 ```
 
 Статика подхватывается сразу. После изменения серверной части игр:
-`sudo docker restart snake3d` / `sudo docker restart shooter`.
+`sudo docker restart snake3d` / `sudo docker restart shooter` /
+`sudo docker restart durak`.
