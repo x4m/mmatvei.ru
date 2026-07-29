@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pac-Man: Hell Edition — mmatvei.ru</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #08090f;
+      color: #f2f2f2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      touch-action: none;
+      user-select: none;
+    }
+    .game {
+      width: min(94vw, 490px);
+      display: grid;
+      gap: 12px;
+    }
+    .topbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 2px;
+    }
+    h1 {
+      margin: 0;
+      color: #ffd91a;
+      font: 800 clamp(17px, 4.8vw, 25px)/1 ui-monospace, monospace;
+      letter-spacing: -.06em;
+      text-transform: uppercase;
+    }
+    h1 span { color: #d43d2f; }
+    .stats {
+      display: flex;
+      gap: 14px;
+      color: #767b91;
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .stats b { display: block; margin-top: 3px; color: #fff; font-size: 15px; }
+    .stage {
+      position: relative;
+      border: 1px solid #242846;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #02030a;
+      box-shadow: 0 0 45px rgba(45, 61, 170, .13);
+    }
+    canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      gap: 11px;
+      padding: 30px;
+      text-align: center;
+      background: rgba(2, 3, 10, .82);
+      backdrop-filter: blur(3px);
+    }
+    .overlay[hidden] { display: none; }
+    .overlay strong {
+      color: #ffd91a;
+      font-size: clamp(22px, 7vw, 34px);
+      letter-spacing: -.05em;
+      text-transform: uppercase;
+    }
+    .overlay p { margin: 0; color: #9da2b8; font-size: 12px; line-height: 1.55; }
+    button, .back {
+      border: 0;
+      border-radius: 6px;
+      font: 700 11px/1 ui-monospace, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .overlay button {
+      justify-self: center;
+      padding: 12px 20px;
+      background: #ffd91a;
+      color: #111;
+      cursor: pointer;
+    }
+    .bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+    }
+    .back { color: #64697e; text-decoration: none; }
+    .hint { color: #4e5368; font-size: 10px; text-transform: uppercase; }
+    .controls { display: none; gap: 5px; }
+    .controls button {
+      width: 42px;
+      height: 42px;
+      background: #161927;
+      color: #c9ccda;
+      font-size: 17px;
+    }
+    @media (pointer: coarse), (max-height: 720px) {
+      body { overflow: auto; padding: 12px 0; }
+      .controls { display: flex; }
+      .hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <header class="topbar">
+      <h1>Pac-Man <span>Hell</span></h1>
+      <div class="stats">
+        <div>Счёт<b id="score">0000</b></div>
+        <div>Жизни<b id="lives">● ● ●</b></div>
+      </div>
+    </header>
+
+    <section class="stage">
+      <canvas id="board" width="456" height="504" aria-label="Игровое поле Pac-Man"></canvas>
+      <div class="overlay" id="overlay">
+        <strong id="message">Готов?</strong>
+        <p id="submessage">Собери все точки.<br>Не дай демонам тебя поймать.</p>
+        <button id="start">Играть</button>
+      </div>
+    </section>
+
+    <footer class="bottom">
+      <a class="back" href="index.html">← Все игры</a>
+      <span class="hint">Стрелки / WASD · P — пауза</span>
+      <div class="controls" aria-label="Управление">
+        <button data-dir="left" aria-label="Влево">←</button>
+        <button data-dir="up" aria-label="Вверх">↑</button>
+        <button data-dir="down" aria-label="Вниз">↓</button>
+        <button data-dir="right" aria-label="Вправо">→</button>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    const TILE = 24;
+    const MAP = [
+      "###################",
+      "#........#........#",
+      "#.###.##.#.##.###.#",
+      "#o###.##.#.##.###o#",
+      "#.................#",
+      "#.###.#.###.#.###.#",
+      "#.....#..#..#.....#",
+      "#####.## # ##.#####",
+      "    #.#     #.#    ",
+      "#####.# ### #.#####",
+      "     .  # #  .     ",
+      "#####.# ### #.#####",
+      "    #.#     #.#    ",
+      "#####.# ### #.#####",
+      "#........#........#",
+      "#.###.##.#.##.###.#",
+      "#o..#.........#..o#",
+      "###.#.#.###.#.#.###",
+      "#.....#..#..#.....#",
+      "#.#######.#######.#",
+      "#.................#",
+      "###################"
+    ];
+    const canvas = document.querySelector("#board");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.querySelector("#overlay");
+    const message = document.querySelector("#message");
+    const submessage = document.querySelector("#submessage");
+    const startButton = document.querySelector("#start");
+    const scoreEl = document.querySelector("#score");
+    const livesEl = document.querySelector("#lives");
+    canvas.width = MAP[0].length * TILE;
+    canvas.height = MAP.length * TILE;
+
+    const DIRS = {
+      left:  { x: -1, y: 0, angle: Math.PI },
+      right: { x: 1, y: 0, angle: 0 },
+      up:    { x: 0, y: -1, angle: -Math.PI / 2 },
+      down:  { x: 0, y: 1, angle: Math.PI / 2 },
+      stop:  { x: 0, y: 0, angle: 0 }
+    };
+    const opposite = { left: "right", right: "left", up: "down", down: "up" };
+    const demonTypes = [
+      { color: "#a9472d", horn: "#d9b37b", eye: "#ffd73a" },
+      { color: "#bf252e", horn: "#ead5b1", eye: "#7cf2ff" },
+      { color: "#76613a", horn: "#c9aa70", eye: "#ff542e" }
+    ];
+
+    let grid, pac, demons, score, lives, pellets, powerTimer = 0, ghostCombo = 0;
+    let running = false, paused = false;
+    let lastTime = 0, elapsed = 0, touchStart = null;
+
+    function tileAt(x, y) {
+      if (y < 0 || y >= MAP.length) return "#";
+      if (x < 0 || x >= MAP[0].length) return " ";
+      return grid[y][x];
+    }
+    function isOpen(x, y) { return tileAt(x, y) !== "#"; }
+    function centered(a) {
+      return Math.abs(a.x - Math.round(a.x)) < .075 && Math.abs(a.y - Math.round(a.y)) < .075;
+    }
+    function resetPositions() {
+      pac = { x: 9, y: 16, dir: "left", next: "left", speed: 5.7 };
+      demons = [
+        { x: 8, y: 12, dir: "left", speed: 3.55, type: 0, target: null },
+        { x: 9, y: 12, dir: "left", speed: 3.35, type: 1, target: null },
+        { x: 10, y: 12, dir: "right", speed: 3.2, type: 2, target: null }
+      ];
+    }
+    function newGame() {
+      grid = MAP.map(row => row.split(""));
+      pellets = 0;
+      grid.forEach(row => row.forEach(cell => { if (cell === "." || cell === "o") pellets++; }));
+      score = 0;
+      lives = 3;
+      elapsed = 0;
+      powerTimer = 0;
+      ghostCombo = 0;
+      resetPositions();
+      updateHud();
+      running = true;
+      paused = false;
+      overlay.hidden = true;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+    function updateHud() {
+      scoreEl.textContent = String(score).padStart(4, "0");
+      livesEl.textContent = Array(Math.max(lives, 0)).fill("●").join(" ");
+    }
+    function setDirection(name) {
+      if (DIRS[name]) pac.next = name;
+      if (!running && message.textContent === "Пауза") resume();
+    }
+    function canMove(entity, direction) {
+      const d = DIRS[direction];
+      return isOpen(Math.round(entity.x) + d.x, Math.round(entity.y) + d.y);
+    }
+    function tunnel(entity) {
+      if (entity.x < -.55) entity.x = MAP[0].length - .45;
+      if (entity.x > MAP[0].length - .45) entity.x = -.55;
+    }
+    function movePac(dt) {
+      if (centered(pac)) {
+        pac.x = Math.round(pac.x);
+        pac.y = Math.round(pac.y);
+        if (canMove(pac, pac.next)) pac.dir = pac.next;
+        if (!canMove(pac, pac.dir)) pac.dir = "stop";
+      }
+      const d = DIRS[pac.dir];
+      pac.x += d.x * pac.speed * dt;
+      pac.y += d.y * pac.speed * dt;
+      tunnel(pac);
+      const tx = Math.round(pac.x), ty = Math.round(pac.y);
+      const cell = tileAt(tx, ty);
+      if (centered(pac) && (cell === "." || cell === "o")) {
+        grid[ty][tx] = " ";
+        pellets--;
+        score += cell === "o" ? 50 : 10;
+        if (cell === "o") {
+          powerTimer = 7;
+          ghostCombo = 0;
+          demons.forEach(demon => {
+            demon.dir = opposite[demon.dir] || demon.dir;
+            demon.target = null;
+          });
+        }
+        updateHud();
+        if (!pellets) finish(true);
+      }
+    }
+    function chooseDemonDirection(demon) {
+      let choices = Object.keys(DIRS).filter(k => {
+        if (k === "stop") return false;
+        const d = DIRS[k];
+        const x = Math.round(demon.x) + d.x;
+        const y = Math.round(demon.y) + d.y;
+        return x >= 0 && x < MAP[0].length && isOpen(x, y);
+      });
+      if (choices.length > 1) choices = choices.filter(k => k !== opposite[demon.dir]);
+      if (!choices.length) return opposite[demon.dir];
+      const chase = powerTimer <= 0 && Math.random() < .72;
+      choices.sort((a, b) => {
+        const da = DIRS[a], db = DIRS[b];
+        const aa = Math.abs(demon.x + da.x - pac.x) + Math.abs(demon.y + da.y - pac.y);
+        const bb = Math.abs(demon.x + db.x - pac.x) + Math.abs(demon.y + db.y - pac.y);
+        if (powerTimer > 0) return bb - aa;
+        return chase ? aa - bb : Math.random() - .5;
+      });
+      return choices[0];
+    }
+    function meetDemon(demon) {
+      if (powerTimer > 0) {
+        ghostCombo++;
+        score += 200 * (2 ** (ghostCombo - 1));
+        updateHud();
+        demon.x = 9;
+        demon.y = 12;
+        demon.dir = "left";
+        demon.target = null;
+        demon.sleepUntil = elapsed + 1.4;
+      } else {
+        loseLife();
+      }
+    }
+    function moveDemons(dt) {
+      demons.forEach((demon, i) => {
+        if (elapsed < i * 1.15 || elapsed < (demon.sleepUntil || 0)) return;
+        if (!demon.target) {
+          demon.dir = chooseDemonDirection(demon);
+          const direction = DIRS[demon.dir];
+          demon.target = {
+            x: Math.round(demon.x) + direction.x,
+            y: Math.round(demon.y) + direction.y
+          };
+        }
+        const dx = demon.target.x - demon.x;
+        const dy = demon.target.y - demon.y;
+        const distance = Math.hypot(dx, dy);
+        const step = demon.speed * dt;
+        if (distance <= step) {
+          demon.x = demon.target.x;
+          demon.y = demon.target.y;
+          demon.target = null;
+        } else {
+          demon.x += dx / distance * step;
+          demon.y += dy / distance * step;
+        }
+        if (Math.hypot(demon.x - pac.x, demon.y - pac.y) < .68) meetDemon(demon);
+      });
+    }
+    function loseLife() {
+      if (!running) return;
+      lives--;
+      updateHud();
+      if (lives <= 0) {
+        finish(false);
+      } else {
+        running = false;
+        powerTimer = 0;
+        ghostCombo = 0;
+        setTimeout(() => {
+          resetPositions();
+          elapsed = 0;
+          running = true;
+          lastTime = performance.now();
+          requestAnimationFrame(loop);
+        }, 650);
+      }
+    }
+    function finish(won) {
+      running = false;
+      message.textContent = won ? "Лабиринт очищен" : "Тебя съели";
+      submessage.innerHTML = won
+        ? `Счёт: ${score}<br>Демоны возвращаются в ад.`
+        : `Счёт: ${score}<br>Попробуешь ещё раз?`;
+      startButton.textContent = "Ещё раз";
+      overlay.hidden = false;
+    }
+    function pause() {
+      if (!running) return;
+      running = false;
+      paused = true;
+      message.textContent = "Пауза";
+      submessage.textContent = "Нажми P, стрелку или кнопку.";
+      startButton.textContent = "Продолжить";
+      overlay.hidden = false;
+    }
+    function resume() {
+      if (!paused) return;
+      paused = false;
+      running = true;
+      overlay.hidden = true;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+
+    function drawMaze() {
+      ctx.fillStyle = "#02030a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < grid.length; y++) {
+        for (let x = 0; x < grid[y].length; x++) {
+          const cell = grid[y][x];
+          if (cell === "#") {
+            ctx.fillStyle = "#1d286f";
+            ctx.fillRect(x * TILE + 2, y * TILE + 2, TILE - 4, TILE - 4);
+            ctx.fillStyle = "#3247bd";
+            ctx.fillRect(x * TILE + 5, y * TILE + 5, TILE - 10, 2);
+          } else if (cell === "." || cell === "o") {
+            ctx.fillStyle = cell === "o" ? "#ffd91a" : "#d8d8d2";
+            ctx.beginPath();
+            ctx.arc((x + .5) * TILE, (y + .5) * TILE, cell === "o" ? 4 : 1.7, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+    function drawPac() {
+      const x = (pac.x + .5) * TILE, y = (pac.y + .5) * TILE;
+      const angle = DIRS[pac.dir].angle;
+      const mouth = .16 + Math.abs(Math.sin(performance.now() / 85)) * .22;
+      ctx.fillStyle = "#ffd91a";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, TILE * .42, angle + mouth, angle + Math.PI * 2 - mouth);
+      ctx.closePath();
+      ctx.fill();
+    }
+    function drawDemon(d) {
+      const p = demonTypes[d.type];
+      const x = Math.round((d.x + .5) * TILE), y = Math.round((d.y + .5) * TILE);
+      const frightened = powerTimer > 0;
+      const flashing = powerTimer < 2 && Math.floor(powerTimer * 7) % 2 === 0;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = frightened ? (flashing ? "#f3f3eb" : "#91a7ff") : p.horn;
+      ctx.beginPath();
+      ctx.moveTo(-9, -6); ctx.lineTo(-12, -12); ctx.lineTo(-5, -8);
+      ctx.moveTo(9, -6); ctx.lineTo(12, -12); ctx.lineTo(5, -8);
+      ctx.fill();
+      ctx.fillStyle = frightened ? (flashing ? "#d7d8df" : "#244fd8") : p.color;
+      ctx.fillRect(-9, -8, 18, 15);
+      ctx.fillRect(-11, -4, 22, 8);
+      ctx.fillRect(-8, 7, 5, 4);
+      ctx.fillRect(3, 7, 5, 4);
+      ctx.fillStyle = frightened ? "#f5f5f0" : p.eye;
+      ctx.fillRect(-7, -4, 4, 4);
+      ctx.fillRect(3, -4, 4, 4);
+      ctx.fillStyle = "#100b08";
+      ctx.fillRect(-6, -3, 2, 2);
+      ctx.fillRect(4, -3, 2, 2);
+      ctx.fillRect(-5, 3, 10, 3);
+      ctx.fillStyle = "#eee2c9";
+      ctx.fillRect(-4, 3, 2, 3);
+      ctx.fillRect(2, 3, 2, 3);
+      ctx.restore();
+    }
+    function draw() {
+      drawMaze();
+      drawPac();
+      demons.forEach(drawDemon);
+    }
+    function loop(now) {
+      if (!running) { draw(); return; }
+      const dt = Math.min((now - lastTime) / 1000, .02);
+      lastTime = now;
+      elapsed += dt;
+      powerTimer = Math.max(0, powerTimer - dt);
+      movePac(dt);
+      moveDemons(dt);
+      draw();
+      if (running) requestAnimationFrame(loop);
+    }
+
+    const keyMap = {
+      ArrowLeft: "left", KeyA: "left",
+      ArrowRight: "right", KeyD: "right",
+      ArrowUp: "up", KeyW: "up",
+      ArrowDown: "down", KeyS: "down"
+    };
+    addEventListener("keydown", event => {
+      if (keyMap[event.code]) {
+        event.preventDefault();
+        setDirection(keyMap[event.code]);
+      }
+      if (event.code === "KeyP" || event.code === "Escape") {
+        event.preventDefault();
+        paused ? resume() : pause();
+      }
+      if (event.code === "Space" && !running) {
+        event.preventDefault();
+        paused ? resume() : newGame();
+      }
+    });
+    document.querySelectorAll("[data-dir]").forEach(button => {
+      button.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        setDirection(button.dataset.dir);
+      });
+    });
+    canvas.addEventListener("pointerdown", event => {
+      touchStart = { x: event.clientX, y: event.clientY };
+    });
+    canvas.addEventListener("pointerup", event => {
+      if (!touchStart) return;
+      const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y;
+      if (Math.hypot(dx, dy) > 18) setDirection(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up"));
+      touchStart = null;
+    });
+    startButton.addEventListener("click", () => paused ? resume() : newGame());
+    document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+
+    grid = MAP.map(row => row.split(""));
+    resetPositions();
+    draw();
+  </script>
+</body>
+</html>
