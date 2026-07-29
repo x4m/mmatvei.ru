@@ -115,6 +115,40 @@ function nextActive(afterId) {
   }
   return null;
 }
+function nextOnlineActive(afterId) {
+  if (!game.order.length) return null;
+  const start = game.order.indexOf(afterId);
+  for (let n = 1; n <= game.order.length; n++) {
+    const candidate = game.order[(Math.max(start, 0) + n) % game.order.length];
+    const p = players.get(candidate);
+    if (p?.online && (p.hand.length > 0 || game.deck.length > 0)) return candidate;
+  }
+  return null;
+}
+function removeDisconnectedPlayer(pid) {
+  const p = players.get(pid);
+  if (!p || p.online || game.phase !== "playing" || !game.order.includes(pid)) return;
+  const oldOrder = [...game.order];
+  const oldIndex = oldOrder.indexOf(pid);
+  game.order = game.order.filter(id => id !== pid);
+  players.delete(pid);
+  if (game.order.filter(id => players.get(id)?.online).length < 2) {
+    return returnToLobby("Партия завершена: осталось меньше двух игроков");
+  }
+  if (!game.order.includes(game.attacker) || !players.get(game.attacker)?.online) {
+    const before = oldOrder[(oldIndex - 1 + oldOrder.length) % oldOrder.length];
+    game.attacker = nextOnlineActive(before);
+  }
+  if (!game.order.includes(game.defender) || !players.get(game.defender)?.online || game.defender === game.attacker) {
+    game.defender = nextOnlineActive(game.attacker);
+  }
+  game.passed = game.passed.filter(id => game.order.includes(id));
+  game.maxAttack = Math.min(6, players.get(game.defender)?.hand.length || 0);
+  game.log = `${p.name} вышел — ход передан дальше`;
+  autoPassUnable();
+  maybeEndRound();
+  broadcast();
+}
 function beats(card, attack) {
   if (card.joker) return true;
   if (attack.joker) return false;
@@ -137,6 +171,21 @@ function allCovered() { return game.table.length > 0 && game.table.every(pair =>
 function allAttackersDone() {
   const eligible = activeIds().filter(pid => pid !== game.defender);
   return eligible.every(pid => game.passed.includes(pid));
+}
+function canAddSomething(pid) {
+  const p = players.get(pid);
+  if (!p || pid === game.defender || game.passed.includes(pid)) return false;
+  if (!game.table.length || game.table.length >= game.maxAttack) return false;
+  const ranks = tableRanks();
+  return p.hand.some(card => ranks.has(card.rank));
+}
+function autoPassUnable() {
+  if (!game.table.length) return;
+  for (const pid of activeIds()) {
+    if (pid !== game.defender && !game.passed.includes(pid) && !canAddSomething(pid)) {
+      game.passed.push(pid);
+    }
+  }
 }
 function fillHands(startId) {
   let index = game.order.indexOf(startId);
@@ -184,7 +233,9 @@ function endRound(defenderTakes) {
   game.passed = [];
   game.taking = false;
   if (finishIfNeeded()) return;
-  const next = defenderTakes ? nextActive(oldDefender) : oldDefender;
+  const next = defenderTakes
+    ? nextActive(oldDefender)
+    : (activeIds().includes(oldDefender) ? oldDefender : nextActive(oldDefender));
   game.attacker = next;
   game.defender = nextActive(next);
   if (!game.attacker || !game.defender || game.attacker === game.defender) {
@@ -245,6 +296,7 @@ function handle(p, m) {
     game.table.push({ attack: card, defense: null, by: p.id });
     game.passed = game.passed.filter(pid => pid !== p.id);
     game.log = `${p.name} подкинул ${card.rank}${card.suit}`;
+    autoPassUnable();
     if (game.taking && game.table.length >= game.maxAttack) endRound(true);
     return broadcast();
   }
@@ -255,7 +307,25 @@ function handle(p, m) {
     removeCard(p, card.id);
     pair.defense = card;
     game.log = `${p.name} отбивается`;
+    autoPassUnable();
     maybeEndRound();
+    return broadcast();
+  }
+  if (m.t === "transfer" && p.id === game.defender && !game.taking) {
+    if (!game.table.length || game.table.some(pair => pair.defense)) return;
+    const card = p.hand.find(c => c.id === m.card);
+    if (!card || !tableRanks().has(card.rank)) return;
+    const newDefender = nextActive(p.id);
+    const receiver = players.get(newDefender);
+    if (!receiver || newDefender === game.attacker || receiver.hand.length < game.table.length + 1 || game.table.length >= 6) return;
+    removeCard(p, card.id);
+    game.table.push({ attack: card, defense: null, by: p.id });
+    game.attacker = p.id;
+    game.defender = newDefender;
+    game.maxAttack = Math.min(6, receiver.hand.length);
+    game.passed = game.passed.filter(pid => pid !== p.id && pid !== newDefender);
+    game.log = `${p.name} переводит на ${receiver.name}`;
+    autoPassUnable();
     return broadcast();
   }
   if (m.t === "pass" && p.id !== game.defender && game.table.length) {
@@ -269,6 +339,7 @@ function handle(p, m) {
     // После решения забрать остальные могут подкинуть до лимита.
     game.taking = true;
     game.log = `${p.name} решил забрать — можно подкинуть`;
+    autoPassUnable();
     const attackers = activeIds().filter(pid => pid !== p.id);
     if (attackers.every(pid => game.passed.includes(pid)) || game.table.length >= game.maxAttack) endRound(true);
     return broadcast();
@@ -326,9 +397,7 @@ wss.on("connection", ws => {
       }
       // Короткий обрыв связи не ломает партию, но брошенная игра не висит вечно.
       setTimeout(() => {
-        if (game.phase === "playing" && onlinePlayingCount() < 2) {
-          returnToLobby("Партия завершена: игроки отключились");
-        }
+        if (game.phase === "playing" && !me.online) removeDisconnectedPlayer(me.id);
       }, 20000);
     }
     broadcast();

@@ -26,7 +26,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 .badge{min-width:135px;padding:10px 14px;border:2px solid #ffffff25;border-radius:14px;background:#09261dd9;text-align:center;font-size:18px}
 .badge strong{display:block;font-size:22px}.badge.turn{border-color:var(--gold);box-shadow:0 0 18px #f4c95d88}.badge.defender{border-color:var(--blue);box-shadow:0 0 18px #8fe3ff66}.badge.out{opacity:.5}
 .board{position:relative;flex:1;min-height:270px;display:flex;align-items:center;justify-content:center;padding:22px}
-.deckinfo{position:absolute;left:18px;top:16px;font-size:22px;font-weight:800}.trump{color:#111;text-shadow:0 1px #fff8}.trump.red{color:var(--red)}
+.deckinfo{position:absolute;left:18px;top:16px;font-size:22px;font-weight:800}.trump{display:block;margin-top:14px;color:#111;text-shadow:0 1px #fff8}.trump.red{color:var(--red)}
+.deckstack{position:relative;width:70px;height:96px;margin:10px 0 0 12px}.decklayer{position:absolute;width:62px;height:86px;border:2px solid #efe3bd;border-radius:8px;background:repeating-linear-gradient(45deg,#173759 0 6px,#e5c96e 6px 9px);box-shadow:0 2px 3px #0006}.deckempty{display:grid;place-items:center;border:2px dashed #ffffff55;background:#ffffff0b;color:#ffffffaa;font-size:15px;text-align:center}
 #table{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center}.pair{position:relative;width:112px;height:160px}.pair .card:first-child{position:absolute;left:0;top:0}.pair .card:nth-child(2){position:absolute;left:30px;top:32px;transform:rotate(8deg)}
 .card{width:88px;height:126px;flex:0 0 auto;border:3px solid #d8d1b8;border-radius:12px;background:var(--cream);color:var(--ink);box-shadow:0 5px 10px #0007;display:flex;flex-direction:column;justify-content:space-between;padding:7px;font-weight:1000;font-size:26px;line-height:.9;transition:.12s}
 .card.red{color:var(--red)}button.card{cursor:pointer}.card.selected{transform:translateY(-20px);outline:5px solid var(--gold)}.card.playable{border-color:var(--gold);box-shadow:0 0 18px #ffd45c}.card.target{outline:5px solid var(--blue);cursor:pointer}
@@ -66,14 +67,14 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
   <section id="game" class="hidden">
     <div class="players" id="players"></div>
     <div class="board">
-      <div class="deckinfo"><span id="deck"></span><br><span class="trump" id="trump"></span></div>
+      <div class="deckinfo"><div class="deckstack" id="deck"></div><span class="trump" id="trump"></span></div>
       <div id="table"></div>
     </div>
     <div class="message" id="message"></div>
     <div class="controls">
       <div class="handtitle"><b>Ваши карты</b><span id="handCount"></span></div>
       <div class="hand" id="hand"></div>
-      <div class="actions"><button class="bigbtn hidden" id="passBtn">БИТО</button><button class="bigbtn danger hidden" id="takeBtn">ЗАБИРАЮ</button><button class="bigbtn secondary hidden" id="resetBtn">НОВАЯ ПАРТИЯ</button></div>
+      <div class="actions"><button class="bigbtn hidden" id="transferBtn">ПЕРЕВЕСТИ →</button><button class="bigbtn hidden" id="passBtn">БИТО</button><button class="bigbtn danger hidden" id="takeBtn">ЗАБИРАЮ</button><button class="bigbtn secondary hidden" id="resetBtn">НОВАЯ ПАРТИЯ</button></div>
     </div>
   </section>
 </main>
@@ -99,6 +100,7 @@ function connect(tv,name){
 $("#readyBtn").onclick=()=>{ready=!ready;send({t:"ready",ready})};
 $("#passBtn").onclick=()=>send({t:"pass"});
 $("#takeBtn").onclick=()=>send({t:"take"});
+$("#transferBtn").onclick=()=>{if(selected){send({t:"transfer",card:selected.id});selected=null}};
 $("#resetBtn").onclick=()=>send({t:"reset"});
 function send(m){if(ws?.readyState===1)ws.send(JSON.stringify(m))}
 function pname(id){return state.players.find(p=>p.id===id)?.name||"Игрок"}
@@ -130,16 +132,22 @@ function renderPlayers(){
     d.innerHTML=`<strong>${esc(p?.name||"?")}${id===you?" (вы)":""}</strong>${p?.out?"вышел":role} · 🂠 ${p?.cards||0}${!p?.online?" · нет связи":""}`;return d}));
 }
 function renderTable(){
-  $("#deck").textContent=`Колода: ${state.deck}`;$("#trump").textContent=`Козырь ${state.trump||"—"}`;$("#trump").classList.toggle("red","♦♥".includes(state.trump));
+  renderDeck();$("#trump").textContent=`Козырь ${state.trump||"—"}`;$("#trump").classList.toggle("red","♦♥".includes(state.trump));
   const table=$("#table");table.replaceChildren();
   state.table.forEach((pair,i)=>{const d=document.createElement("div");d.className="pair";d.append(card(pair.attack));
     if(pair.defense)d.append(card(pair.defense));else if(you===state.defender&&selected&&canBeat(selected,pair.attack)){const target=document.createElement("button");target.className="card target";target.innerHTML="<span>Побить</span><span class=\"pip\">↑</span>";target.onclick=()=>defend(i);d.append(target)}
     table.append(d)});
   let msg=state.log;
-  if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":selected?"Теперь нажмите «Побить» на нужной карте":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту":"Вы отбились — ждём остальных";
+  if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":selected&&canTransfer(selected)?"Можно побить или перевести на следующего игрока":selected?"Теперь нажмите «Побить» на нужной карте":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту":"Вы отбились — ждём остальных";
   else if(you&&you===state.attacker&&state.table.length===0)msg="ВАШ ХОД — нажмите любую карту в руке";
   if(state.players.filter(p=>p.online&&p.playing).length<2)msg="Другой игрок отключился. Можно подождать или начать новую партию.";
   $("#message").textContent=msg;
+}
+function renderDeck(){
+  const deck=$("#deck");deck.replaceChildren();
+  if(!state.deck){const empty=document.createElement("div");empty.className="decklayer deckempty";empty.textContent="пусто";deck.append(empty);return}
+  const layers=Math.max(1,Math.ceil(state.deck/5));
+  for(let i=0;i<layers;i++){const layer=document.createElement("div");layer.className="decklayer";layer.style.left=`${i*.8}px`;layer.style.top=`${-i*.65}px`;deck.append(layer)}
 }
 function renderHand(){
   const hand=$("#hand");hand.replaceChildren();$("#handCount").textContent=`${state.hand.length} шт.`;
@@ -148,12 +156,13 @@ function renderHand(){
   const attacker=you&&you!==state.defender&&state.table.length>0&&!state.passed.includes(you);
   $("#passBtn").classList.toggle("hidden",!attacker||state.taking&&state.passed.includes(you));
   $("#takeBtn").classList.toggle("hidden",you!==state.defender||!state.table.length||state.taking);
+  $("#transferBtn").classList.toggle("hidden",!selected||!canTransfer(selected));
   $("#resetBtn").classList.toggle("hidden",!you||state.players.filter(p=>p.online&&p.playing).length>=2);
 }
 function choose(c,playable){
   if(you===state.defender){
     const targets=state.table.map((pair,i)=>({pair,i})).filter(x=>!x.pair.defense&&canBeat(c,x.pair.attack));
-    if(targets.length===1){send({t:"defend",card:c.id,pair:targets[0].i});selected=null}
+    if(targets.length===1&&!canTransfer(c)){send({t:"defend",card:c.id,pair:targets[0].i});selected=null}
     else{selected=selected?.id===c.id?null:c;renderTable();renderHand()}
   }
   else if(canAttackCard(c))send({t:"attack",card:c.id});
@@ -174,6 +183,18 @@ function sortedHand(){
     if(at!==bt)return at?1:-1;
     return suitOrder.indexOf(a.suit)-suitOrder.indexOf(b.suit)||rank(a.rank)-rank(b.rank);
   });
+}
+function canTransfer(c){
+  if(!c||you!==state.defender||state.taking||!state.table.length||state.table.some(p=>p.defense)||state.table.length>=6)return false;
+  if(!state.table.some(p=>p.attack.rank===c.rank))return false;
+  const at=state.order.indexOf(you);
+  for(let n=1;n<state.order.length;n++){
+    const id=state.order[(at+n)%state.order.length],p=state.players.find(x=>x.id===id);
+    if(p&&!p.out){
+      return id!==state.attacker&&p.cards>=state.table.length+1;
+    }
+  }
+  return false;
 }
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
 </script>
