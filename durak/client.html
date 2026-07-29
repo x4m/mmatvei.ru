@@ -73,7 +73,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
     <div class="controls">
       <div class="handtitle"><b>Ваши карты</b><span id="handCount"></span></div>
       <div class="hand" id="hand"></div>
-      <div class="actions"><button class="bigbtn hidden" id="passBtn">БИТО</button><button class="bigbtn danger hidden" id="takeBtn">ЗАБИРАЮ</button></div>
+      <div class="actions"><button class="bigbtn hidden" id="passBtn">БИТО</button><button class="bigbtn danger hidden" id="takeBtn">ЗАБИРАЮ</button><button class="bigbtn secondary hidden" id="resetBtn">НОВАЯ ПАРТИЯ</button></div>
     </div>
   </section>
 </main>
@@ -99,6 +99,7 @@ function connect(tv,name){
 $("#readyBtn").onclick=()=>{ready=!ready;send({t:"ready",ready})};
 $("#passBtn").onclick=()=>send({t:"pass"});
 $("#takeBtn").onclick=()=>send({t:"take"});
+$("#resetBtn").onclick=()=>send({t:"reset"});
 function send(m){if(ws?.readyState===1)ws.send(JSON.stringify(m))}
 function pname(id){return state.players.find(p=>p.id===id)?.name||"Игрок"}
 function card(c,opts={}){
@@ -137,6 +138,7 @@ function renderTable(){
   let msg=state.log;
   if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":selected?"Теперь нажмите «Побить» на нужной карте":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту":"Вы отбились — ждём остальных";
   else if(you&&you===state.attacker&&state.table.length===0)msg="ВАШ ХОД — нажмите любую карту в руке";
+  if(state.players.filter(p=>p.online&&p.playing).length<2)msg="Другой игрок отключился. Можно подождать или начать новую партию.";
   $("#message").textContent=msg;
 }
 function renderHand(){
@@ -146,6 +148,7 @@ function renderHand(){
   const attacker=you&&you!==state.defender&&state.table.length>0&&!state.passed.includes(you);
   $("#passBtn").classList.toggle("hidden",!attacker||state.taking&&state.passed.includes(you));
   $("#takeBtn").classList.toggle("hidden",you!==state.defender||!state.table.length||state.taking);
+  $("#resetBtn").classList.toggle("hidden",!you||state.players.filter(p=>p.online&&p.playing).length>=2);
 }
 function choose(c,playable){
   if(you===state.defender){

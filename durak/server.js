@@ -46,6 +46,21 @@ function freshGame() {
   };
 }
 
+function returnToLobby(reason = "Собираем игроков") {
+  game = freshGame();
+  game.log = reason;
+  for (const [pid, p] of players) {
+    p.hand = [];
+    p.ready = false;
+    if (!p.online) players.delete(pid);
+  }
+  broadcast();
+}
+
+function onlinePlayingCount() {
+  return game.order.filter(pid => players.get(pid)?.online).length;
+}
+
 function id() { return crypto.randomBytes(10).toString("hex"); }
 function send(ws, value) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(value)); }
 function shuffle(items) {
@@ -219,6 +234,9 @@ function handle(p, m) {
     startGame();
     return broadcast();
   }
+  if (m.t === "reset" && game.phase === "playing" && onlinePlayingCount() < 2) {
+    return returnToLobby("Предыдущая партия завершена");
+  }
   if (game.phase !== "playing" || !game.order.includes(p.id)) return;
   if (m.t === "attack") {
     const card = p.hand.find(c => c.id === m.card);
@@ -306,6 +324,12 @@ wss.on("connection", ws => {
         if (game.taking && allAttackersDone()) endRound(true);
         else maybeEndRound();
       }
+      // Короткий обрыв связи не ломает партию, но брошенная игра не висит вечно.
+      setTimeout(() => {
+        if (game.phase === "playing" && onlinePlayingCount() < 2) {
+          returnToLobby("Партия завершена: игроки отключились");
+        }
+      }, 20000);
     }
     broadcast();
   });
