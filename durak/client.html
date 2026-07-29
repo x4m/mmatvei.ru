@@ -132,10 +132,10 @@ function renderTable(){
   $("#deck").textContent=`Колода: ${state.deck}`;$("#trump").textContent=`Козырь ${state.trump||"—"}`;
   const table=$("#table");table.replaceChildren();
   state.table.forEach((pair,i)=>{const d=document.createElement("div");d.className="pair";d.append(card(pair.attack));
-    if(pair.defense)d.append(card(pair.defense));else if(you===state.defender&&selected){const target=card(selected,{class:canBeat(selected,pair.attack)?"target":"",click:()=>defend(i)});if(canBeat(selected,pair.attack))d.append(target)}
+    if(pair.defense)d.append(card(pair.defense));else if(you===state.defender&&selected&&canBeat(selected,pair.attack)){const target=document.createElement("button");target.className="card target";target.innerHTML="<span>Побить</span><span class=\"pip\">↑</span>";target.onclick=()=>defend(i);d.append(target)}
     table.append(d)});
   let msg=state.log;
-  if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту и карту на столе":"Вы отбились — ждём остальных";
+  if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":selected?"Теперь нажмите «Побить» на нужной карте":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту":"Вы отбились — ждём остальных";
   else if(you&&you===state.attacker&&state.table.length===0)msg="Ваш ход — выберите карту";
   $("#message").textContent=msg;
 }
@@ -150,7 +150,11 @@ function renderHand(){
   $("#takeBtn").classList.toggle("hidden",you!==state.defender||!state.table.length||state.taking);
 }
 function choose(c,playable){
-  if(you===state.defender){selected=selected?.id===c.id?null:c;renderTable();renderHand()}
+  if(you===state.defender){
+    const targets=state.table.map((pair,i)=>({pair,i})).filter(x=>!x.pair.defense&&canBeat(c,x.pair.attack));
+    if(targets.length===1){send({t:"defend",card:c.id,pair:targets[0].i});selected=null}
+    else{selected=selected?.id===c.id?null:c;renderTable();renderHand()}
+  }
   else if(playable)send({t:"attack",card:c.id});
 }
 function defend(i){if(selected&&canBeat(selected,state.table[i].attack)){send({t:"defend",card:selected.id,pair:i});selected=null}}
