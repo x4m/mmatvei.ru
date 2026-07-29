@@ -26,7 +26,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 .badge{min-width:135px;padding:10px 14px;border:2px solid #ffffff25;border-radius:14px;background:#09261dd9;text-align:center;font-size:18px}
 .badge strong{display:block;font-size:22px}.badge.turn{border-color:var(--gold);box-shadow:0 0 18px #f4c95d88}.badge.defender{border-color:var(--blue);box-shadow:0 0 18px #8fe3ff66}.badge.out{opacity:.5}
 .board{position:relative;flex:1;min-height:270px;display:flex;align-items:center;justify-content:center;padding:22px}
-.deckinfo{position:absolute;left:18px;top:16px;font-size:22px;font-weight:800}.trump{color:var(--gold)}
+.deckinfo{position:absolute;left:18px;top:16px;font-size:22px;font-weight:800}.trump{color:#111;text-shadow:0 1px #fff8}.trump.red{color:var(--red)}
 #table{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center}.pair{position:relative;width:112px;height:160px}.pair .card:first-child{position:absolute;left:0;top:0}.pair .card:nth-child(2){position:absolute;left:30px;top:32px;transform:rotate(8deg)}
 .card{width:88px;height:126px;flex:0 0 auto;border:3px solid #d8d1b8;border-radius:12px;background:var(--cream);color:var(--ink);box-shadow:0 5px 10px #0007;display:flex;flex-direction:column;justify-content:space-between;padding:7px;font-weight:1000;font-size:26px;line-height:.9;transition:.12s}
 .card.red{color:var(--red)}button.card{cursor:pointer}.card.selected{transform:translateY(-20px);outline:5px solid var(--gold)}.card.playable{border-color:var(--gold);box-shadow:0 0 18px #ffd45c}.card.target{outline:5px solid var(--blue);cursor:pointer}
@@ -103,7 +103,7 @@ function send(m){if(ws?.readyState===1)ws.send(JSON.stringify(m))}
 function pname(id){return state.players.find(p=>p.id===id)?.name||"Игрок"}
 function card(c,opts={}){
   const el=document.createElement(opts.button?"button":"div");el.className=`card ${(c.color==="red"||"♦♥".includes(c.suit)?"red ":"")}${opts.class||""}`;
-  el.innerHTML=c.joker?`<span>${c.rank}</span><span class="pip">★</span><span>ДЖОКЕР</span>`:`<span>${c.rank}<br>${c.suit}</span><span class="pip">${c.suit}</span>`;
+  el.innerHTML=c.joker?`<span>${c.rank}</span><span class="pip">★</span><span>ДЖОКЕР</span>`:`<span>${c.rank}</span><span class="pip">${c.suit}</span>`;
   if(opts.click)el.onclick=opts.click;return el;
 }
 function render(){
@@ -129,21 +129,19 @@ function renderPlayers(){
     d.innerHTML=`<strong>${esc(p?.name||"?")}${id===you?" (вы)":""}</strong>${p?.out?"вышел":role} · 🂠 ${p?.cards||0}${!p?.online?" · нет связи":""}`;return d}));
 }
 function renderTable(){
-  $("#deck").textContent=`Колода: ${state.deck}`;$("#trump").textContent=`Козырь ${state.trump||"—"}`;
+  $("#deck").textContent=`Колода: ${state.deck}`;$("#trump").textContent=`Козырь ${state.trump||"—"}`;$("#trump").classList.toggle("red","♦♥".includes(state.trump));
   const table=$("#table");table.replaceChildren();
   state.table.forEach((pair,i)=>{const d=document.createElement("div");d.className="pair";d.append(card(pair.attack));
     if(pair.defense)d.append(card(pair.defense));else if(you===state.defender&&selected&&canBeat(selected,pair.attack)){const target=document.createElement("button");target.className="card target";target.innerHTML="<span>Побить</span><span class=\"pip\">↑</span>";target.onclick=()=>defend(i);d.append(target)}
     table.append(d)});
   let msg=state.log;
   if(you===state.defender)msg=state.taking?"Вы забираете. Подождите, пока подкинут.":selected?"Теперь нажмите «Побить» на нужной карте":state.table.some(x=>!x.defense)?"На вас ходят — выберите карту":"Вы отбились — ждём остальных";
-  else if(you&&you===state.attacker&&state.table.length===0)msg="Ваш ход — выберите карту";
+  else if(you&&you===state.attacker&&state.table.length===0)msg="ВАШ ХОД — нажмите любую карту в руке";
   $("#message").textContent=msg;
 }
 function renderHand(){
   const hand=$("#hand");hand.replaceChildren();$("#handCount").textContent=`${state.hand.length} шт.`;
-  const ranks=new Set(state.table.flatMap(p=>[p.attack.rank,p.defense?.rank]));
-  const attackable=you!==state.defender&&!state.passed.includes(you)&&state.table.length<state.maxAttack;
-  state.hand.forEach(c=>{const playable=attackable&&(state.table.length===0?you===state.attacker:ranks.has(c.rank));
+  sortedHand().forEach(c=>{const playable=canAttackCard(c);
     const b=card(c,{button:true,class:`${selected?.id===c.id?"selected ":""}${playable?"playable":""}`,click:()=>choose(c,playable)});hand.append(b)});
   const attacker=you&&you!==state.defender&&state.table.length>0&&!state.passed.includes(you);
   $("#passBtn").classList.toggle("hidden",!attacker||state.taking&&state.passed.includes(you));
@@ -155,11 +153,25 @@ function choose(c,playable){
     if(targets.length===1){send({t:"defend",card:c.id,pair:targets[0].i});selected=null}
     else{selected=selected?.id===c.id?null:c;renderTable();renderHand()}
   }
-  else if(playable)send({t:"attack",card:c.id});
+  else if(canAttackCard(c))send({t:"attack",card:c.id});
 }
 function defend(i){if(selected&&canBeat(selected,state.table[i].attack)){send({t:"defend",card:selected.id,pair:i});selected=null}}
 function canBeat(c,a){if(c.joker)return true;if(a.joker)return false;if(c.suit===a.suit)return rank(c.rank)>rank(a.rank);return c.suit===state.trump&&a.suit!==state.trump}
 function rank(r){return["2","3","4","5","6","7","8","9","10","В","Д","К","Т"].indexOf(r)}
+function canAttackCard(c){
+  if(!you||you===state.defender||state.passed.includes(you)||state.table.length>=state.maxAttack)return false;
+  if(state.table.length===0)return you===state.attacker;
+  return new Set(state.table.flatMap(p=>[p.attack.rank,p.defense?.rank].filter(Boolean))).has(c.rank);
+}
+function sortedHand(){
+  const suitOrder=["♠","♣","♦","♥"];
+  return [...state.hand].sort((a,b)=>{
+    if(a.joker||b.joker)return(a.joker||0)-(b.joker||0);
+    const at=a.suit===state.trump,bt=b.suit===state.trump;
+    if(at!==bt)return at?1:-1;
+    return suitOrder.indexOf(a.suit)-suitOrder.indexOf(b.suit)||rank(a.rank)-rank(b.rank);
+  });
+}
 function esc(s){const d=document.createElement("div");d.textContent=s;return d.innerHTML}
 </script>
 </body>
