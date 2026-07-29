@@ -82,13 +82,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 <script>
 "use strict";
 const $=s=>document.querySelector(s);
-const isTV=new URLSearchParams(location.search).has("tv");
+let isTV=new URLSearchParams(location.search).has("tv");
 let ws,state=null,you=null,selected=null,ready=false;
 const savedName=localStorage.getItem("durakName")||"";
 $("#name").value=savedName;
 if(isTV){document.body.classList.add("tv");connect(true)}
 $("#joinBtn").onclick=()=>{const name=$("#name").value.trim();if(!name)return $("#error").textContent="Напишите имя";localStorage.setItem("durakName",name);connect(false,name)};
-$("#tvBtn").onclick=()=>{history.replaceState(null,"","?tv");document.body.classList.add("tv");connect(true)};
+$("#tvBtn").onclick=()=>{isTV=true;history.replaceState(null,"","?tv");document.body.classList.add("tv");connect(true)};
 function connect(tv,name){
   $("#error").textContent="Подключаемся…";
   const proto=location.protocol==="https:"?"wss":"ws";
